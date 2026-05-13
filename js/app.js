@@ -1285,7 +1285,6 @@ function openShipModal(name, imo, nameEn) {
       }
       getAISAndRender(d.data[0], name, imo, body, ft);
     });
-  });
 }
 
 function getAISAndRender(ship, name, imo, body, ft) {
