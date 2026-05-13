@@ -530,18 +530,20 @@ var dashRefreshTimer = null;
 function rd() {
   var kw = (document.getElementById('dFilter').value || '').trim().toLowerCase();
   var dockSel = document.getElementById('dDock');
-  var dockFilter = dockSel ? (dockSel.value || '').trim() : '';
+  var dockFilter = (dockSel && dockSel.value) ? dockSel.value.trim() : '';
 
   /* 先收集并更新码头下拉 */
-  var allDocks = {};
-  ships.forEach(function(s) { if (s.tm) allDocks[s.tm] = true; });
-  var dockList = Object.keys(allDocks).sort();
-  if (dockSel && dockSel.options.length !== dockList.length + 1) {
+  if (dockSel && dockSel.options) {
+    var allDocks = {};
+    ships.forEach(function(s) { if (s.tm) allDocks[s.tm] = true; });
+    var dockList = Object.keys(allDocks).sort();
+    if (dockSel.options.length !== dockList.length + 1) {
     dockSel.innerHTML = '<option value="">全部码头</option>';
     dockList.forEach(function(d) {
       var o = document.createElement('option'); o.value = d; o.textContent = d; dockSel.appendChild(o);
     });
     if (dockFilter) dockSel.value = dockFilter;
+    }
   }
 
   var filtered = ships;
@@ -1154,7 +1156,10 @@ async function publishData() {
 
 async function tryLoadSharedData() {
   try {
-    var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now());
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 5000);
+    var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now(), { signal: controller.signal });
+    clearTimeout(timeout);
     if (!resp.ok) return null;
     var data = await resp.json();
     if (Array.isArray(data) && data.length) return data;
