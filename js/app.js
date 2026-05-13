@@ -614,6 +614,11 @@ async function onDashDate() {
     ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
   } else {
     ships = await loadDateData(d);
+    /* 本地无数据则回退到共享数据 */
+    if (!ships.length && sharedShips.length) {
+      ships = sharedShips.filter(function(s) { return s.date === d; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+    }
   }
   rd();
 }
@@ -955,6 +960,15 @@ async function onDashDate3() {
     });
   } else {
     ships = await loadDateData(d);
+    /* 本地无数据则回退到共享数据 */
+    if (!ships.length && sharedShips.length) {
+      ships = sharedShips.filter(function(s) { return s.date === d; });
+      ships.forEach(function(s) {
+        s.eta = s.eta || '';
+        s.maritime7 = !!s.maritime7;
+        s.maritime7Note = s.maritime7Note || '';
+      });
+    }
   }
   rd3();
 }
