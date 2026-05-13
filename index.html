@@ -39,14 +39,19 @@
     </div>
     <p style="color:#64748B;font-size:.8rem;margin:4px 0 14px">选中日期后自动展示 · 自动匹配代理船舶 · 点击卡片跳转船讯网</p>
     <div class="sb">
-      <div class="sb-item sb-blue"><div class="n" id="stT">0</div><div class="l">船舶数</div></div>
-      <div class="sb-item sb-gray"><div class="n" id="stA">0</div><div class="l">有抵港</div></div>
-      <div class="sb-item sb-amber"><div class="n" id="stD">0</div><div class="l">有开航</div></div>
+      <div class="sb-item sb-blue"><div class="n" id="stT">0</div><div class="l">代理船舶数</div></div>
+      <div class="sb-item sb-red"><div class="n" id="stA">0</div><div class="l">24h预抵 ≤24h</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="stD">0</div><div class="l">48h预抵 ≤48h</div></div>
       <div class="sb-item sb-green"><div class="n" id="stM">0</div><div class="l">码头数</div></div>
     </div>
     <div class="r">
       <div class="c"><label>📅 日期</label><select id="dDate" onchange="onDashDate()"><option value="">—选择—</option></select></div>
+      <div class="c"><label>🏗️ 码头</label><select id="dDock" onchange="rd()"><option value="">全部码头</option></select></div>
       <div class="c"><input id="dFilter" placeholder="🔍 搜船名/航次" oninput="rd()"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <span id="dRefresh" style="font-size:10px;color:#94A3B8">🔄 每10分钟自动刷新</span>
+      <span id="dCountdown" style="font-size:10px;color:#64748B"></span>
     </div>
   </div>
   <div id="dg"><div class="st-big">📂 请先上传船期表</div></div>
@@ -81,20 +86,36 @@
 <div id="t4" class="tc">
   <div class="cd">
     <h2>🗺️ 上海港海图 — 码头 & 锚地分布</h2>
-    <p style="color:#64748B;font-size:.8rem;margin:4px 0 10px">洋山/外高桥/宝山/浦东码头及锚地位置示意 · 航线船舶动画展示</p>
+    <p style="color:#64748B;font-size:.8rem;margin:4px 0 10px">洋山深水港 · 外高桥 · 宝山 · 浦东 各码头及锚地位置标注</p>
   </div>
-  <div style="background:#0A1628;border-radius:14px;padding:16px;overflow:hidden">
-    <canvas id="portCanvas" style="width:100%;display:block"></canvas>
-  </div>
-  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-    <div style="background:#F0F7FF;border:1px solid #DBEAFE;border-radius:8px;padding:6px 12px;font-size:11px">
-      <span style="color:#0EA5E9;font-weight:700">● 12</span> 个码头
+  <div class="port-map">
+    <div class="port-map-bg">
+      <!-- 海岸线轮廓 -->
+      <div class="port-coast"></div>
+      <!-- 长江口 -->
+      <div class="port-river"></div>
+      <!-- 码头标注 -->
+      <div class="port-marker port-marker-t1" title="洋山深水港"><span>洋山深水港</span><i>深水集装箱枢纽</i></div>
+      <div class="port-marker port-marker-t2" title="洋山四期"><span>洋山四期</span><i>全自动化码头</i></div>
+      <div class="port-marker port-marker-t3" title="外高桥一期"><span>外高桥一期</span><i>集装箱/滚装</i></div>
+      <div class="port-marker port-marker-t4" title="外高桥二期"><span>外高桥二期</span><i>集装箱码头</i></div>
+      <div class="port-marker port-marker-t5" title="外高桥三四期"><span>外高桥三四期</span><i>多用途码头</i></div>
+      <div class="port-marker port-marker-t6" title="外高桥五期"><span>外高桥五期</span><i>集装箱码头</i></div>
+      <div class="port-marker port-marker-t7" title="浦东码头"><span>浦东码头</span><i>散杂货/集装箱</i></div>
+      <div class="port-marker port-marker-t8" title="宝山码头"><span>宝山码头</span><i>散货/件杂货</i></div>
+      <div class="port-marker port-marker-t9" title="罗泾码头"><span>罗泾码头</span><i>煤炭/矿石</i></div>
+      <div class="port-marker port-marker-t10" title="军工路码头"><span>军工路码头</span><i>件杂货/钢材</i></div>
+      <!-- 锚地标注 -->
+      <div class="port-anchorage port-anch-a1" title="长江口1号锚地">⚓ 长江口1号锚地</div>
+      <div class="port-anchorage port-anch-a2" title="长江口2号锚地">⚓ 长江口2号锚地</div>
+      <div class="port-anchorage port-anch-a3" title="绿华山锚地">⚓ 绿华山锚地</div>
+      <div class="port-anchorage port-anch-a4" title="洋山港锚地">⚓ 洋山港锚地</div>
+      <div class="port-anchorage port-anch-a5" title="南槽锚地">⚓ 南槽锚地</div>
+      <div class="port-anchorage port-anch-a6" title="宝山锚地">⚓ 宝山锚地</div>
     </div>
-    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 12px;font-size:11px">
-      <span style="color:#FBBF24;font-weight:700">⚓ 6</span> 个锚地
-    </div>
-    <div style="background:#F0FFF4;border:1px solid #BBF7D0;border-radius:8px;padding:6px 12px;font-size:11px">
-      <span style="color:#38BDF8;font-weight:700">● 10</span> 艘在航
+    <div class="port-legend">
+      <span><i class="port-dot-t"></i> 码头/Terminal</span>
+      <span><i class="port-dot-a"></i> 锚地/Anchorage</span>
     </div>
   </div>
 </div>

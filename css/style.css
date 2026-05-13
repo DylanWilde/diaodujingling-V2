@@ -122,11 +122,55 @@ tr:hover td{background:#F1F5F9}
 .bb-bubble{display:inline-block;max-width:85%;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .bb-mine .bb-bubble{background:#EFF6FF;border-color:#BFDBFE}
 .bb-meta{font-size:10px;color:#94A3B8;margin-bottom:4px}
-.bb-text{font-size:13px;color:#0F172A;line-height:1.5;word-break:break-word}
+.bb-text{font-size:15px;color:#0F172A;line-height:1.6;word-break:break-word}
 .bb-del{cursor:pointer;color:#DC2626;margin-left:4px;font-weight:700;font-size:12px}
 .bb-del:hover{color:#B91C1C}
 
 /* ═══ 禁用/只读状态 ═══ */
 input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B8;cursor:not-allowed}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ═══ 24h预抵红色统计卡片 ═══ */
+.sb-red .n{color:#DC2626}
+
+/* ═══ 静态港口海图 ═══ */
+.port-map{position:relative;background:linear-gradient(180deg,#E8F4FD 0%,#C8E6F5 40%,#A8D8EA 70%,#7EC8E0 100%);border-radius:14px;overflow:hidden;min-height:480px}
+.port-map-bg{position:relative;width:100%;height:500px;background:linear-gradient(180deg,#D4ECF8 0%,#B8DFF0 30%,#9DD5EB 60%,#6FBBD8 100%)}
+/* 海岸线 - 用before模拟 */
+.port-map-bg::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:
+  radial-gradient(ellipse 280px 200px at 60% 55%,#F1F5F9 0%,#E2E8F0 30%,transparent 70%),
+  radial-gradient(ellipse 200px 140px at 35% 40%,#F8FAFC 0%,#E2E8F0 40%,transparent 70%),
+  radial-gradient(ellipse 150px 100px at 48% 65%,#F1F5F9 0%,#CBD5E1 35%,transparent 70%);
+  opacity:.7}
+/* 黄浦江水道 */
+.port-river{position:absolute;top:30%;left:30%;width:8px;height:200px;background:linear-gradient(180deg,rgba(30,80,140,.25),rgba(30,100,160,.35),rgba(20,60,120,.2));border-radius:4px;transform:rotate(-15deg);box-shadow:0 0 20px rgba(30,80,160,.15)}
+/* 码头标记 */
+.port-marker{position:absolute;z-index:2;cursor:pointer;transition:.2s}
+.port-marker span{display:block;background:#2563EB;color:#fff;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.port-marker i{display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);background:#0F172A;color:#F8FAFC;font-size:9px;padding:2px 8px;border-radius:6px;white-space:nowrap;margin-top:2px;z-index:3}
+.port-marker:hover i{display:block}
+.port-marker:hover span{background:#1D4ED8;transform:scale(1.08)}
+/* 码头具体定位 */
+.port-marker-t1{top:68%;left:62%}  /* 洋山深水港 */
+.port-marker-t2{top:62%;left:67%}  /* 洋山四期 */
+.port-marker-t3{top:32%;left:52%}  /* 外高桥一期 */
+.port-marker-t4{top:36%;left:54%}  /* 外高桥二期 */
+.port-marker-t5{top:40%;left:55%}  /* 外高桥三四期 */
+.port-marker-t6{top:44%;left:54%}  /* 外高桥五期 */
+.port-marker-t7{top:25%;left:43%}  /* 浦东码头 */
+.port-marker-t8{top:12%;left:38%}  /* 宝山码头 */
+.port-marker-t9{top:8%;left:32%}   /* 罗泾码头 */
+.port-marker-t10{top:20%;left:42%} /* 军工路码头 */
+/* 锚地标注 */
+.port-anchorage{position:absolute;z-index:1;color:#D97706;font-size:10px;font-weight:600;background:rgba(255,255,255,.75);padding:2px 8px;border-radius:10px;border:1px dashed #FBBF24;white-space:nowrap}
+.port-anch-a1{top:16%;left:58%}
+.port-anch-a2{top:20%;left:62%}
+.port-anch-a3{top:54%;left:75%}
+.port-anch-a4{top:76%;left:56%}
+.port-anch-a5{top:42%;left:48%}
+.port-anch-a6{top:6%;left:30%}
+/* 图例 */
+.port-legend{display:flex;gap:16px;padding:10px 16px;font-size:11px;color:#475569;background:rgba(255,255,255,.9)}
+.port-dot-t{display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563EB;margin-right:4px;vertical-align:middle}
+.port-dot-a{display:inline-block;width:10px;height:10px;border-radius:50%;background:#D97706;margin-right:4px;vertical-align:middle}
 

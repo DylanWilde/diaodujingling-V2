@@ -189,8 +189,7 @@ function openLoginModal() {
     + '<div style="margin-bottom:12px"><label>👤 账号</label><input id="loginUser" placeholder="输入账号"></div>'
     + '<div style="margin-bottom:12px"><label>🔒 密码</label><input id="loginPass" type="password" placeholder="输入密码" onkeydown="if(event.key===\'Enter\')doLogin()"></div>'
     + '<div id="loginMsg" class="st" style="text-align:center;margin-bottom:8px"></div>'
-    + '<div style="text-align:center"><button class="btn btn-p" onclick="doLogin()">🔑 登录</button></div>'
-    + '<div style="text-align:center;margin-top:10px;font-size:11px;color:#94A3B8">默认管理员: admin / admin888</div>';
+    + '<div style="text-align:center"><button class="btn btn-p" onclick="doLogin()">🔑 登录</button></div>';
   document.getElementById('loginModalFt').innerHTML = ''
     + '<button class="btn" style="background:#E2E8F0;color:#475569" onclick="closeLoginModal()">关闭</button>';
   overlay.classList.add('on');

@@ -63,7 +63,8 @@ async function saveDateData(list, date) {
       _m: s._m ? 1 : 0,
       eta: s.eta || '',
       maritime7: s.maritime7 ? 1 : 0,
-      maritime7Note: s.maritime7Note || ''
+      maritime7Note: s.maritime7Note || '',
+      maritime7By: s.maritime7By || ''
     });
   });
   return new Promise(function(ok) { tx.oncomplete = function() { ok(true); }; });
@@ -81,7 +82,8 @@ function loadDateData(date) {
         s._m = !!s._m;
         s.eta = s.eta || '';
         s.maritime7 = !!s.maritime7;
-        s.maritime7Note = s.maritime7Note || '';
+        s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || '';
+        s.maritime7By = s.maritime7By || '';
         return s;
       }));
     };
@@ -142,6 +144,7 @@ function saveDeclToDB(date, name, iv, ev, data) {
       if (hit) {
         hit.maritime7 = data.maritime7 ? 1 : 0;
         hit.maritime7Note = data.maritime7Note || '';
+        hit.maritime7By = data.maritime7By || '';
         st.put(hit);
       }
     };
@@ -522,34 +525,61 @@ async function rs() {
 }
 
 /* ═══ 看板渲染 ═══ */
+var dashRefreshTimer = null;
+
 function rd() {
   var kw = (document.getElementById('dFilter').value || '').trim().toLowerCase();
-  var filtered = ships;
-  if (kw) {
-    filtered = [];
-    for (var i = 0; i < ships.length; i++) {
-      var s = ships[i];
-      if (s.name.toLowerCase().indexOf(kw) >= 0 ||
-          (s.iv||'').toLowerCase().indexOf(kw) >= 0 ||
-          (s.ev||'').toLowerCase().indexOf(kw) >= 0 ||
-          (s.en||'').toLowerCase().indexOf(kw) >= 0) {
-        filtered.push(s);
-      }
-    }
+  var dockSel = document.getElementById('dDock');
+  var dockFilter = dockSel ? (dockSel.value || '').trim() : '';
+
+  /* 先收集并更新码头下拉 */
+  var allDocks = {};
+  ships.forEach(function(s) { if (s.tm) allDocks[s.tm] = true; });
+  var dockList = Object.keys(allDocks).sort();
+  if (dockSel && dockSel.options.length !== dockList.length + 1) {
+    dockSel.innerHTML = '<option value="">全部码头</option>';
+    dockList.forEach(function(d) {
+      var o = document.createElement('option'); o.value = d; o.textContent = d; dockSel.appendChild(o);
+    });
+    if (dockFilter) dockSel.value = dockFilter;
   }
 
+  var filtered = ships;
+  if (kw) {
+    filtered = filtered.filter(function(s) {
+      return s.name.toLowerCase().indexOf(kw) >= 0 ||
+        (s.iv||'').toLowerCase().indexOf(kw) >= 0 ||
+        (s.ev||'').toLowerCase().indexOf(kw) >= 0 ||
+        (s.en||'').toLowerCase().indexOf(kw) >= 0;
+    });
+  }
+  if (dockFilter) {
+    filtered = filtered.filter(function(s) { return (s.tm||'') === dockFilter; });
+  }
+
+  /* 新统计: 代理船舶数 / 24h预抵(ETA≤24h) / 48h预抵(ETA≤48h) / 码头数 */
+  var count24h = 0, count48h = 0;
+  filtered.forEach(function(s) {
+    var hours = getETAHours(s.eta);
+    if (hours >= 0 && hours <= 24) count24h++;
+    if (hours >= 0 && hours <= 48) count48h++;
+  });
   document.getElementById('stT').textContent = filtered.length;
-  document.getElementById('stA').textContent = filtered.filter(function(s){return s.arV!=null;}).length;
-  document.getElementById('stD').textContent = filtered.filter(function(s){return s.drV!=null;}).length;
+  document.getElementById('stA').textContent = count24h;
+  document.getElementById('stD').textContent = count48h;
   var terms = {};
   filtered.forEach(function(s){ if (s.tm) terms[s.tm] = true; });
   document.getElementById('stM').textContent = Object.keys(terms).length;
+
+  /* 倒计时 */
+  updateCountdown();
 
   if (!filtered.length) {
     document.getElementById('dg').innerHTML = '<div class="st-big">无匹配船舶</div>';
     return;
   }
 
+  /* 按码头分组 */
   var groups = {};
   filtered.forEach(function(s) {
     var key = s.tm || '';
@@ -570,30 +600,67 @@ function rd() {
     for (var i = 0; i < grp.length; i++) {
       var sh = grp[i];
       var ha = sh.arV != null, hd = sh.drV != null;
+      var etaHours = getETAHours(sh.eta);
       var tags = '';
       if (ha) tags += '<span class="tag tag-arr">抵' + sh.arV + 'm</span>';
       if (hd) tags += '<span class="tag tag-dep">开' + sh.drV + 'm</span>';
+      if (etaHours >= 0 && etaHours <= 24) tags += '<span class="eta-tag eta-red">24h</span>';
+      else if (etaHours > 24 && etaHours <= 48) tags += '<span class="eta-tag eta-orange">48h</span>';
+
       var key = sh.name + '|' + (sh.iv||'') + '|' + (sh.ev||'');
-      var enVal = enChanges[key] !== undefined ? enChanges[key] : (sh.en || '');
       var shipInfo = SHIP_MAP[sh.name];
-      var matchedEn = enVal || (shipInfo ? shipInfo.en : '');
+      var matchedEn = sh.en || (shipInfo ? shipInfo.en : '');
       var imoNumber = shipInfo && shipInfo.imo ? shipInfo.imo : '';
       var imoDisplay = imoNumber ? 'IMO' + imoNumber : '';
+
       html += '<div class="sc" style="cursor:pointer;background:#F0F7FF" onclick="openShipModal(\'' + (sh.name||'').replace(/'/g,"\\'") + '\',\'' + imoNumber + '\',\'' + (matchedEn||'').replace(/'/g,"\\'") + '\')" title="点击查看船舶实时动态">'
         + '<div class="sn"><span>' + esc(sh.name) + '</span><span class="tags">' + tags + '</span></div>'
-        + '<div class="en-row">'
-        + '<span style="font-size:11px;color:#2563EB">' + esc(matchedEn) + ' (' + imoDisplay + ')</span>'
-        + '</div>'
         + '<div class="info">'
-        + (sh.iv ? '航次 <b>' + esc(sh.iv) + '/' + esc(sh.ev) + '</b><br>' : '')
-        + '🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b>'
+        + (sh.iv ? '航次 <b>' + esc(sh.iv) + '/' + esc(sh.ev) + '</b> · ' : '')
+        + 'ETA: <b>' + fmtETA(sh.eta) + '</b>'
+        + '<br>🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b>'
         + (sh.rm !== '—' ? ' · ' + esc(sh.rm) : '')
+        + (sh.maritime7By ? '<br><span style="font-size:9px;color:#16A34A">✅ 海事已确认 by ' + esc(sh.maritime7By) + '</span>' : '')
         + '</div></div>';
     }
     html += '</div>';
   }
   html += '</div>';
   document.getElementById('dg').innerHTML = html;
+}
+
+/* 10分钟倒计时 */
+var dashCountdown = 600;
+function updateCountdown() {
+  var el = document.getElementById('dCountdown');
+  if (!el) return;
+  var m = Math.floor(dashCountdown / 60);
+  var s = dashCountdown % 60;
+  el.textContent = '下次刷新: ' + m + ':' + (s<10?'0':'') + s;
+}
+
+function startDashRefresh() {
+  if (dashRefreshTimer) clearInterval(dashRefreshTimer);
+  dashCountdown = 600;
+  updateCountdown();
+  dashRefreshTimer = setInterval(function() {
+    dashCountdown--;
+    updateCountdown();
+    if (dashCountdown <= 0) {
+      dashCountdown = 600;
+      /* 重新加载当前日期数据 */
+      (async function() {
+        if (curDate) {
+          ships = await loadDateData(curDate);
+          if (!ships.length && sharedShips.length) {
+            ships = sharedShips.filter(function(s) { return s.date === curDate; });
+            ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
+          }
+          rd();
+        }
+      })();
+    }
+  }, 1000);
 }
 
 function trackEn(el) {
@@ -630,13 +697,13 @@ async function onDashDate() {
   document.getElementById('dDate3').value = d;
   if (isViewerMode) {
     ships = sharedShips.filter(function(s) { return s.date === d; });
-    ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+    ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
   } else {
     ships = await loadDateData(d);
     /* 本地无数据则回退到共享数据 */
     if (!ships.length && sharedShips.length) {
       ships = sharedShips.filter(function(s) { return s.date === d; });
-      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
     }
   }
   rd();
@@ -704,19 +771,31 @@ function sw(i) {
   /* 未登录用户只能访问 Tab 0-3 (看板/申报/海图/黑板) */
   var isLoggedIn = !!getCurrentUser();
   if (!isLoggedIn && i >= 4) { alert('👀 请先登录管理员或调度员账号'); return; }
-  /* 调度员不能访问 Tab 4-5 (转换器/管理) */
-  if (isLoggedIn && getCurrentUser().role === 'dispatcher' && i >= 4) { alert('🔒 仅管理员可访问'); return; }
 
   var btns = document.querySelectorAll('.tb-btn');
   var tabs = document.querySelectorAll('.tc');
   for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('on', j === i);
   for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('on', j === i);
 
-  if (i === 0) rd();
+  if (i === 0) { rd(); startDashRefresh(); }
+  else { if (dashRefreshTimer) { clearInterval(dashRefreshTimer); dashRefreshTimer = null; } }
+
   if (i === 1) rd3();
-  if (i === 2) initPortChart();
+  if (i === 2) {} /* 海图已是静态HTML */
   if (i === 3) initBlackboard();
-  if (i === 5) ld();
+
+  /* 调度员进管理Tab时锁定当日 */
+  if (i === 5) {
+    var user = getCurrentUser();
+    if (user && user.role === 'dispatcher') {
+      var today = new Date().toISOString().split('T')[0];
+      document.getElementById('sd').value = today;
+      document.getElementById('sd').disabled = true;
+    } else {
+      document.getElementById('sd').disabled = false;
+    }
+    ld();
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -924,7 +1003,7 @@ function openDeclModal(name, iv, ev) {
     + '<div class="check-row">'
     + '<input type="checkbox" id="declMaritime7" ' + (isViewerMode ? 'disabled ' : '') + (s.maritime7 ? 'checked' : '') + '>'
     + '<label for="declMaritime7"' + (isViewerMode ? ' style="color:#94A3B8"' : '') + '>已完成7日海事申报' + (isViewerMode ? ' （只读）' : '') + '</label>'
-    + '<span id="declMaritimeBadge" class="status-badge ' + (s.maritime7 ? 'badge-done' : 'badge-pending') + '">' + (s.maritime7 ? '✅ 已完成' : '⏳ 未完成') + '</span>'
+    + '<span id="declMaritimeBadge" class="status-badge ' + (s.maritime7 ? 'badge-done' : 'badge-pending') + '">' + (s.maritime7 ? '✅ 已完成' + (s.maritime7By ? ' · ' + esc(s.maritime7By) : '') : '⏳ 未完成') + '</span>'
     + '</div>'
     + '<label for="declMaritimeNote" style="font-size:11px;color:#64748B;margin-top:4px">备注（可选）</label>'
     + '<textarea id="declMaritimeNote" placeholder="未完成原因或备注..." ' + (isViewerMode ? 'disabled style="background:#F8FAFC;color:#94A3B8"' : '') + '>' + esc(s.maritime7Note) + '</textarea>'
@@ -946,22 +1025,26 @@ function openDeclModal(name, iv, ev) {
 
 async function saveDecl() {
   if (!checkEditPerm(curDate)) return;
+  var user = getCurrentUser();
   var parts = _declShipKey.split('|');
   var name = parts[0], iv = parts[1]||'', ev = parts[2]||'';
   var maritime7 = document.getElementById('declMaritime7').checked;
   var maritime7Note = document.getElementById('declMaritimeNote').value.trim();
+  var confirmedBy = maritime7 && user ? user.username : '';
 
   for (var i = 0; i < ships.length; i++) {
     if (ships[i].name === name && (ships[i].iv||'') === iv && (ships[i].ev||'') === ev) {
       ships[i].maritime7 = maritime7;
       ships[i].maritime7Note = maritime7Note;
+      ships[i].maritime7By = confirmedBy;
       break;
     }
   }
 
   await saveDeclToDB(curDate, name, iv, ev, {
     maritime7: maritime7,
-    maritime7Note: maritime7Note
+    maritime7Note: maritime7Note,
+    maritime7By: confirmedBy
   });
 
   closeDeclModal();
@@ -984,7 +1067,7 @@ async function onDashDate3() {
     ships.forEach(function(s) {
       s.eta = s.eta || '';
       s.maritime7 = !!s.maritime7;
-      s.maritime7Note = s.maritime7Note || '';
+      s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || '';
     });
   } else {
     ships = await loadDateData(d);
@@ -994,7 +1077,7 @@ async function onDashDate3() {
       ships.forEach(function(s) {
         s.eta = s.eta || '';
         s.maritime7 = !!s.maritime7;
-        s.maritime7Note = s.maritime7Note || '';
+        s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || '';
       });
     }
   }
@@ -1107,7 +1190,7 @@ function enterViewerMode(sharedData) {
     ships.forEach(function(s) {
       s.eta = s.eta || '';
       s.maritime7 = !!s.maritime7;
-      s.maritime7Note = s.maritime7Note || '';
+      s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || '';
     });
     rd();
     document.getElementById('dbStatus').textContent = '👀 访客模式 · 共 ' + sharedData.length + ' 条共享数据';
@@ -1162,19 +1245,6 @@ function shipxyAIS(mmsi, cb) {
   });
 }
 
-function shipxyLocal(imo, nameEn, cb) {
-  var url = 'http://localhost:9876/api/ship?imo=' + (imo||'') + '&name_en=' + encodeURIComponent(nameEn||'');
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', url, true);
-  xhr.timeout = 5000;
-  xhr.onload = function(){
-    try{ cb(JSON.parse(xhr.responseText)); } catch(e){ cb(null); }
-  };
-  xhr.onerror = function(){ cb(null); };
-  xhr.ontimeout = function(){ cb(null); };
-  xhr.send();
-}
-
 var SHIP_TYPES={0:'未知',1:'油轮',2:'油轮',3:'油轮',4:'油轮',5:'油轮',6:'油轮',7:'货船',8:'货船',9:'货船',10:'货船',11:'货船',12:'货船',13:'货船',14:'货船',15:'货船',16:'货船',20:'高速艇',21:'高速艇',22:'高速艇',23:'高速艇',24:'高速艇',25:'高速艇',26:'高速艇',27:'高速艇',28:'高速艇',29:'高速艇',30:'渔船',31:'拖轮',32:'拖轮',33:'拖轮',34:'拖轮',35:'拖轮',36:'拖轮',37:'拖轮',40:'高速艇',41:'高速艇',42:'高速艇',43:'高速艇',44:'高速艇',45:'高速艇',46:'高速艇',47:'高速艇',48:'高速艇',49:'高速艇',50:'引航/助航',51:'搜救船',52:'拖轮',53:'港务船',54:'防污船',55:'执法船',56:'备件船',57:'医疗船',58:'客船',60:'客船',61:'客船',62:'客船',63:'客船',64:'客船',65:'客船',66:'客船',67:'客船',68:'客船',69:'客船',70:'货船',71:'货船',72:'货船',73:'货船',74:'货船',75:'货船',76:'货船',77:'货船',78:'货船',79:'货船',80:'油轮',81:'油轮',82:'油轮',83:'油轮',84:'油轮',85:'油轮',86:'油轮',87:'油轮',88:'油轮',89:'油轮',90:'其他',91:'其他',92:'其他',93:'其他',94:'其他',95:'其他',96:'其他',97:'其他',98:'其他',99:'其他'};
 function getShipType(t){ return SHIP_TYPES[t] || ('类型'+t); }
 
@@ -1187,15 +1257,9 @@ function openShipModal(name, imo, nameEn) {
   ft.innerHTML = '';
   overlay.classList.add('on');
 
-  shipxyLocal(imo, nameEn, function(localData){
-    if (localData && localData.found) {
-      renderShipCard(localData, name, imo, ft);
-      return;
-    }
-    body.innerHTML = '<div style="text-align:center;padding:30px 0;color:#94A3B8"><div style="font-size:32px;margin-bottom:10px">⏳</div><div>本地代理不可用，换用网络查询...</div></div>';
-    var searchKw = imo || (nameEn || name);
-    var key = APP_CONFIG.shipxyKey;
-    shipxyFetch('http://api.shipxy.com/apicall/v3/SearchShip?key=' + key + '&keywords=' + encodeURIComponent(searchKw) + '&max=1', function(d){
+  var searchKw = imo || (nameEn || name);
+  var key = APP_CONFIG.shipxyKey;
+  shipxyFetch('http://api.shipxy.com/apicall/v3/SearchShip?key=' + key + '&keywords=' + encodeURIComponent(searchKw) + '&max=1', function(d){
       if (!d || d.status!==0 || !d.data || !d.data.length) {
         if (imo && nameEn) {
           shipxyFetch('http://api.shipxy.com/apicall/v3/SearchShip?key=' + key + '&keywords=' + encodeURIComponent(nameEn) + '&max=1', function(d2){
@@ -1364,7 +1428,7 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
     ships = await loadDateData(curDate);
     if (!ships.length && sharedShips.length) {
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
-      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
     }
     document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 数据库 ' + ships.length + ' 条记录';
     document.getElementById('upSt').className = 'st st-info';
@@ -1378,6 +1442,7 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
       if (id === 'dl') sel.value = curDate;
     });
     rd();
+    startDashRefresh();
   } else if (sharedShips.length) {
     /* 只有共享数据 */
     var sdates = {};
@@ -1386,7 +1451,7 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
     if (sdatesList.length) {
       curDate = sdatesList[0];
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
-      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
       sdatesList.forEach(function(d) {
         ['dl','dDate','dDate3'].forEach(function(id) {
           var sel = document.getElementById(id);
@@ -1400,6 +1465,7 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
       document.getElementById('upSt').className = 'st st-info';
       document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedShips.length + ' 条';
       rd();
+      startDashRefresh();
     }
   } else {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
