@@ -114,3 +114,19 @@ tr:hover td{background:#F1F5F9}
 .modal-body.error{text-align:center;padding:40px 20px;color:#DC2626}
 .modal-ft{border-top:1px solid #E2E8F0;padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .modal-ft .btn{text-decoration:none}
+
+/* ═══ 调度小黑板 ═══ */
+.bb-container{background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden}
+.bb-messages{padding:12px 16px;max-height:420px;overflow-y:auto;background:#F8FAFC;min-height:200px}
+.bb-msg{margin-bottom:10px}
+.bb-bubble{display:inline-block;max-width:85%;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.bb-mine .bb-bubble{background:#EFF6FF;border-color:#BFDBFE}
+.bb-meta{font-size:10px;color:#94A3B8;margin-bottom:4px}
+.bb-text{font-size:13px;color:#0F172A;line-height:1.5;word-break:break-word}
+.bb-del{cursor:pointer;color:#DC2626;margin-left:4px;font-weight:700;font-size:12px}
+.bb-del:hover{color:#B91C1C}
+
+/* ═══ 禁用/只读状态 ═══ */
+input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B8;cursor:not-allowed}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+

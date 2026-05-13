@@ -18,15 +18,22 @@ var db = null;
 
 function opDB() {
   return new Promise(function(ok, no) {
-    var r = indexedDB.open(DB, 1);
+    var r = indexedDB.open(DB, 2);
     r.onupgradeneeded = function(e) {
       var d = e.target.result;
       if (!d.objectStoreNames.contains('ships')) {
         var s = d.createObjectStore('ships', { keyPath: 'id', autoIncrement: true });
         s.createIndex('date', 'date', { unique: false });
       }
+      if (!d.objectStoreNames.contains('blackboard')) {
+        d.createObjectStore('blackboard', { keyPath: 'id', autoIncrement: true });
+      }
+      if (!d.objectStoreNames.contains('accounts')) {
+        var ast = d.createObjectStore('accounts', { keyPath: 'username' });
+        ast.add({ username: 'admin', password: simpleHash('admin888'), role: 'admin', created: Date.now() });
+      }
     };
-    r.onsuccess = function(e) { db = e.target.result; ok(db); };
+    r.onsuccess = function(e) { db = e.target.result; window._bbDB = db; ok(db); };
     r.onerror = function(e) {
       no(e);
       var el = document.getElementById('dbStatus');
@@ -286,6 +293,7 @@ async function up() {
   if (!fi.files.length) return;
   curDate = document.getElementById('sd').value;
   if (!curDate) { alert('请先选择日期'); return; }
+  if (!checkEditPerm(curDate)) return;
   var el = document.getElementById('upSt');
   el.innerHTML = '⏳ 解析中...'; el.className = 'st st-info';
   var all = [];
@@ -398,8 +406,19 @@ function qr() {
   el.className = '';
 }
 
+/* ═══ 权限检查 ═══ */
+function checkEditPerm(date) {
+  var user = getCurrentUser();
+  if (!user) { alert('请先登录'); return false; }
+  if (user.role === 'admin') return true;
+  var today = new Date().toISOString().split('T')[0];
+  if (date !== today) { alert('🔒 调度员仅可修改当日(' + today + ')数据'); return false; }
+  return true;
+}
+
 /* ═══ 修改吃水 ═══ */
 async function ed() {
+  if (!checkEditPerm(curDate)) return;
   var n = document.getElementById('es').value.trim();
   var t = document.getElementById('et').value;
   var v = parseFloat(document.getElementById('ev').value);
@@ -682,14 +701,22 @@ function cx() { document.getElementById('ci').value=''; document.getElementById(
 
 /* ═══ Tab切换 ═══ */
 function sw(i) {
-  if (isViewerMode && (i === 2 || i === 3)) { alert('👀 访客模式仅可查看看板'); return; }
+  /* 未登录用户只能访问 Tab 0-3 (看板/申报/海图/黑板) */
+  var isLoggedIn = !!getCurrentUser();
+  if (!isLoggedIn && i >= 4) { alert('👀 请先登录管理员或调度员账号'); return; }
+  /* 调度员不能访问 Tab 4-5 (转换器/管理) */
+  if (isLoggedIn && getCurrentUser().role === 'dispatcher' && i >= 4) { alert('🔒 仅管理员可访问'); return; }
+
   var btns = document.querySelectorAll('.tb-btn');
   var tabs = document.querySelectorAll('.tc');
   for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('on', j === i);
   for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('on', j === i);
+
   if (i === 0) rd();
-  if (i === 1) ld();
-  if (i === 3) rd3();
+  if (i === 1) rd3();
+  if (i === 2) initPortChart();
+  if (i === 3) initBlackboard();
+  if (i === 5) ld();
 }
 
 /* ═══════════════════════════════════════════════════
@@ -918,6 +945,7 @@ function openDeclModal(name, iv, ev) {
 }
 
 async function saveDecl() {
+  if (!checkEditPerm(curDate)) return;
   var parts = _declShipKey.split('|');
   var name = parts[0], iv = parts[1]||'', ev = parts[2]||'';
   var maritime7 = document.getElementById('declMaritime7').checked;
@@ -986,28 +1014,8 @@ function base64Encode(str) {
   return btoa(unescape(encodeURIComponent(str)));
 }
 
-function adminLogin() {
-  var token = localStorage.getItem('gh_token_enc');
-  if (!token) {
-    token = prompt('请输入 GitHub Personal Access Token（Classic，repo权限）：');
-    if (!token) return;
-    localStorage.setItem('gh_token_enc', btoa(token));  /* 简单编码存储 */
-  } else {
-    token = atob(token);  /* 解码 */
-  }
-  enableAdminMode();
-}
-
-function enableAdminMode() {
-  document.getElementById('adminArea').style.display = 'inline';
-  document.getElementById('loginArea').style.display = 'none';
-  document.getElementById('tbAdmin2').style.display = '';
-  document.getElementById('tbAdmin3').style.display = '';
-  document.getElementById('dbStatus').textContent += ' 🔑 管理员';
-  isViewerMode = false;
-}
-
 async function publishData() {
+  if (!getCurrentUser() || getCurrentUser().role !== 'admin') { alert('🔒 仅管理员可发布'); return; }
   var tokenEnc = localStorage.getItem('gh_token_enc');
   if (!tokenEnc) {
     var token = prompt('请输入 GitHub Personal Access Token：');
@@ -1296,14 +1304,8 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
 /* ═══ 启动 ═══ */
 (async function() {
   var sharedData = await tryLoadSharedData();
-  var hasToken = !!localStorage.getItem('gh_token_enc');
 
-  /* 有token自动进入管理员模式 */
-  if (hasToken) {
-    enableAdminMode();
-  }
-
-  /* 有共享数据则预加载（但不锁定UI） */
+  /* 预加载共享数据 */
   if (sharedData) {
     sharedShips = sharedData;
     fillSharedDateSelect(sharedData, 'dDate');
@@ -1314,6 +1316,45 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
   var today = new Date().toISOString().split('T')[0];
   document.getElementById('sd').value = today;
   await opDB();
+
+  /* 尝试自动登录 */
+  var savedUser = localStorage.getItem('dispatch_user');
+  if (savedUser) {
+    try {
+      var d = db || window._bbDB;
+      var tx = d.transaction('accounts', 'readonly');
+      var st = tx.objectStore('accounts');
+      var r = st.get(savedUser);
+      await new Promise(function(ok) { r.onsuccess = ok; r.onerror = ok; });
+      if (r.result) {
+        currentUser = { username: r.result.username, role: r.result.role };
+        updateUserUI();
+      } else {
+        localStorage.removeItem('dispatch_user');
+      }
+    } catch(e) {}
+  }
+
+  /* 初始化小黑板日期下拉 */
+  var bbSel = document.getElementById('bbDate');
+  if (bbSel) {
+    var dates = await listDates();
+    if (!dates.length && sharedShips.length) {
+      var sd = {};
+      sharedShips.forEach(function(s) { if (s.date) sd[s.date] = true; });
+      dates = Object.keys(sd).sort().reverse();
+    }
+    if (!dates.length) dates = [today];
+    bbSel.innerHTML = '<option value="">— 选择 —</option>';
+    dates.forEach(function(d) {
+      var o = document.createElement('option'); o.value = d; o.textContent = d; bbSel.appendChild(o);
+    });
+    bbSel.value = today;
+    bbDate = today;
+    bbMessages = await loadBBMessages(today);
+    renderBlackboard();
+  }
+
   var dates = await listDates();
   if (dates.length) {
     curDate = dates[0];
@@ -1321,19 +1362,45 @@ function closeModal(){ document.getElementById('shipModal').classList.remove('on
     document.getElementById('dDate').value = curDate;
     document.getElementById('dDate3').value = curDate;
     ships = await loadDateData(curDate);
+    if (!ships.length && sharedShips.length) {
+      ships = sharedShips.filter(function(s) { return s.date === curDate; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+    }
     document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 数据库 ' + ships.length + ' 条记录';
     document.getElementById('upSt').className = 'st st-info';
     document.getElementById('dbStatus').textContent = '💾 已加载 ' + ships.length + ' 条数据';
-    var sel1 = document.getElementById('dl'); sel1.innerHTML = '<option value="">— 选择 —</option>';
-    var sel2 = document.getElementById('dDate'); sel2.innerHTML = '<option value="">— 选择 —</option>';
-    var sel3 = document.getElementById('dDate3'); sel3.innerHTML = '<option value="">— 选择 —</option>';
-    dates.forEach(function(d) {
-      var o1 = document.createElement('option'); o1.value = d; o1.textContent = d; sel1.appendChild(o1);
-      var o2 = document.createElement('option'); o2.value = d; o2.textContent = d; sel2.appendChild(o2);
-      var o3 = document.createElement('option'); o3.value = d; o3.textContent = d; sel3.appendChild(o3);
+    ['dl','dDate','dDate3'].forEach(function(id) {
+      var sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">— 选择 —</option>';
+      dates.forEach(function(d) {
+        var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
+      });
+      if (id === 'dl') sel.value = curDate;
     });
-    sel1.value = curDate;
     rd();
+  } else if (sharedShips.length) {
+    /* 只有共享数据 */
+    var sdates = {};
+    sharedShips.forEach(function(s) { if (s.date) sdates[s.date] = true; });
+    var sdatesList = Object.keys(sdates).sort().reverse();
+    if (sdatesList.length) {
+      curDate = sdatesList[0];
+      ships = sharedShips.filter(function(s) { return s.date === curDate; });
+      ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; });
+      sdatesList.forEach(function(d) {
+        ['dl','dDate','dDate3'].forEach(function(id) {
+          var sel = document.getElementById(id);
+          var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
+        });
+      });
+      document.getElementById('sd').value = curDate;
+      document.getElementById('dDate').value = curDate;
+      document.getElementById('dDate3').value = curDate;
+      document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 在线数据 ' + ships.length + ' 条';
+      document.getElementById('upSt').className = 'st st-info';
+      document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedShips.length + ' 条';
+      rd();
+    }
   } else {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
     document.getElementById('dbStatus').textContent = '💾 数据库就绪，等待上传';

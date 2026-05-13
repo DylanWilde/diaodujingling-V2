@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>调度精灵/DispatchHub V5 · 航运智能助手</title>
+<title>调度精灵/DispatchHub V6 · 航运智能助手</title>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -11,23 +11,26 @@
 <div class="container">
 
 <div class="hd">
-  <div><h1>⚓ 调度精灵 <span class="v">V5</span><span class="sub">/ DispatchHub</span></h1></div>
+  <div><h1>⚓ 调度精灵 <span class="v">V6</span><span class="sub">/ DispatchHub</span></h1></div>
   <div style="display:flex;gap:8px;align-items:center">
     <span class="st" id="dbStatus">💾 初始化...</span>
     <span class="by">Tato.Lee</span>
+    <span id="userArea" style="display:none;align-items:center;gap:6px"></span>
     <span id="adminArea" style="display:none"><button class="btn btn-sm btn-p" onclick="publishData()">📤 发布到线上</button></span>
     <span id="loginArea"><button class="btn btn-p" onclick="adminLogin()" id="loginBtn">🔑 管理员登录</button></span>
   </div>
 </div>
 
 <div class="tb">
-  <button class="tb-btn on" onclick="sw(0)">🗺️ 上海港动态看板</button>
-  <button class="tb-btn" onclick="sw(1)">📋 申报确认看板</button>
-  <button class="tb-btn" onclick="sw(2)" id="tbAdmin2">📡 引航站转换器</button>
-  <button class="tb-btn" onclick="sw(3)" id="tbAdmin3">🚢 船舶数据管理</button>
+  <button class="tb-btn on" onclick="sw(0)">🗺️ 动态看板</button>
+  <button class="tb-btn" onclick="sw(1)">📋 申报确认</button>
+  <button class="tb-btn" onclick="sw(2)">🗺️ 港口海图</button>
+  <button class="tb-btn" onclick="sw(3)">📝 调度黑板</button>
+  <button class="tb-btn" onclick="sw(4)" id="tbAdmin2">📡 引航转换</button>
+  <button class="tb-btn" onclick="sw(5)" id="tbAdmin3">🚢 数据管理</button>
 </div>
 
-<!-- TAB 0: 看板 -->
+<!-- ════ TAB 0: 动态看板 ════ -->
 <div id="t0" class="tc on">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -49,7 +52,7 @@
   <div id="dg"><div class="st-big">📂 请先上传船期表</div></div>
 </div>
 
-<!-- TAB 1: 申报看板 -->
+<!-- ════ TAB 1: 申报看板 ════ -->
 <div id="t3" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -74,7 +77,51 @@
   <div id="dg3"><div class="st-big">📂 请先上传船期表</div></div>
 </div>
 
-<!-- TAB 2: 转换器 -->
+<!-- ════ TAB 4: 港口海图 ════ -->
+<div id="t4" class="tc">
+  <div class="cd">
+    <h2>🗺️ 上海港海图 — 码头 & 锚地分布</h2>
+    <p style="color:#64748B;font-size:.8rem;margin:4px 0 10px">洋山/外高桥/宝山/浦东码头及锚地位置示意 · 航线船舶动画展示</p>
+  </div>
+  <div style="background:#0A1628;border-radius:14px;padding:16px;overflow:hidden">
+    <canvas id="portCanvas" style="width:100%;display:block"></canvas>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+    <div style="background:#F0F7FF;border:1px solid #DBEAFE;border-radius:8px;padding:6px 12px;font-size:11px">
+      <span style="color:#0EA5E9;font-weight:700">● 12</span> 个码头
+    </div>
+    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 12px;font-size:11px">
+      <span style="color:#FBBF24;font-weight:700">⚓ 6</span> 个锚地
+    </div>
+    <div style="background:#F0FFF4;border:1px solid #BBF7D0;border-radius:8px;padding:6px 12px;font-size:11px">
+      <span style="color:#38BDF8;font-weight:700">● 10</span> 艘在航
+    </div>
+  </div>
+</div>
+
+<!-- ════ TAB 5: 调度小黑板 ════ -->
+<div id="t5" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2>📝 调度当日提醒黑板</h2>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span id="bbPermHint" style="font-size:10px;color:#94A3B8"></span>
+      </div>
+    </div>
+    <div class="r">
+      <div class="c"><label>📅 日期</label><select id="bbDate" onchange="bbChangeDate()"><option value="">—选择—</option></select></div>
+      <div class="c2"><input id="bbInput" placeholder="✏️ 输入提醒内容..." onkeydown="if(event.key==='Enter')bbSend()"></div>
+      <div style="padding-top:18px"><button class="btn btn-p" onclick="bbSend()">📨 发布</button></div>
+    </div>
+  </div>
+  <div class="bb-container">
+    <div class="bb-messages" id="bbMsgs">
+      <div style="text-align:center;padding:40px;color:#94A3B8">⏳ 加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TAB 2: 转换器 ════ -->
 <div id="t2" class="tc">
   <div class="cd">
     <h2>📡 引航站格式转换器</h2>
@@ -91,7 +138,7 @@
   </div>
 </div>
 
-<!-- TAB 3: 管理 -->
+<!-- ════ TAB 3: 管理 ════ -->
 <div id="t1" class="tc">
   <div class="cd">
     <h2>📂 上传船期表（自动保存到浏览器数据库）</h2>
@@ -105,7 +152,7 @@
 
   <div class="cd">
     <div class="r">
-      <div class="c"><label>📅 当前日期</label><input type="date" id="sd" onchange="ld()"></div>
+      <div class="c"><label>📅 日期</label><input type="date" id="sd" onchange="ld()"></div>
       <div class="c"><label>已有数据</label><select id="dl" onchange="gd()"><option value="">—加载—</option></select></div>
       <div style="padding-top:18px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-p" onclick="exp()">📥 导出Excel</button>
@@ -147,7 +194,7 @@
   </div>
 </div>
 
-</div>
+</div><!-- /container -->
 
 <!-- 船讯网弹窗 -->
 <div class="modal-overlay" id="shipModal" onclick="if(event.target===this)closeModal()">
@@ -158,8 +205,7 @@
     </div>
     <div class="modal-body" id="modalBody">
       <div style="text-align:center;padding:30px 0;color:#94A3B8">
-        <div style="font-size:32px;margin-bottom:10px">⏳</div>
-        <div>正在查询船舶动态...</div>
+        <div style="font-size:32px;margin-bottom:10px">⏳</div><div>正在查询船舶动态...</div>
       </div>
     </div>
     <div class="modal-ft" id="modalFt"></div>
@@ -178,7 +224,34 @@
   </div>
 </div>
 
+<!-- 登录弹窗 -->
+<div class="modal-overlay" id="loginModal" onclick="if(event.target===this)closeLoginModal()">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-hd">
+      <h3>🔑 调度员登录</h3>
+      <button class="modal-close" onclick="closeLoginModal()">✕</button>
+    </div>
+    <div class="modal-body" id="loginModalBody"></div>
+    <div class="modal-ft" id="loginModalFt"></div>
+  </div>
+</div>
+
+<!-- 账号管理弹窗 -->
+<div class="modal-overlay" id="acctModal" onclick="if(event.target===this)closeAcctModal()">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hd">
+      <h3>👥 账号管理</h3>
+      <button class="modal-close" onclick="closeAcctModal()">✕</button>
+    </div>
+    <div class="modal-body" id="acctModalBody"></div>
+    <div class="modal-ft"><button class="btn" style="background:#E2E8F0;color:#475569" onclick="closeAcctModal()">关闭</button></div>
+  </div>
+</div>
+
 <script src="js/ships-map.js"></script>
+<script src="js/port-chart.js"></script>
+<script src="js/blackboard.js"></script>
+<script src="js/accounts.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
