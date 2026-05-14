@@ -505,6 +505,13 @@ function rd() {
   var terms = {};
   filtered.forEach(function(s){ if (s.tm) terms[s.tm] = true; });
   document.getElementById('stM').textContent = Object.keys(terms).length;
+  /* 动画数字 */
+  if (typeof animateCount === 'function') {
+    animateCount(document.getElementById('stT'), filtered.length);
+    animateCount(document.getElementById('stA'), count24h);
+    animateCount(document.getElementById('stD'), count48h);
+    animateCount(document.getElementById('stM'), Object.keys(terms).length);
+  }
 
   /* 倒计时 */
   updateCountdown();
@@ -1133,7 +1140,7 @@ async function publishDataSilent() {
     body: JSON.stringify(body)
   });
   if (!r2.ok) throw new Error('publish failed');
-  document.getElementById('dbStatus').textContent = '📤 已发布 ' + allData.length + ' 条船舶数据';
+  document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + allData.length + ' 条船舶数据';
 }
 
 async function tryLoadSharedData() {
@@ -1395,7 +1402,7 @@ async function seedAccounts() {
     sharedBB = sharedData.blackboard || [];
     fillSharedDateSelect(sharedData, 'dDate');
     fillSharedDateSelect(sharedData, 'dDate3');
-    document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedShips.length + ' 条';
+    document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>👀 在线数据 · 共 ' + sharedShips.length + ' 条';
   }
 
   var today = new Date().toISOString().split('T')[0];
@@ -1456,7 +1463,7 @@ async function seedAccounts() {
     }
     document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 数据库 ' + ships.length + ' 条记录';
     document.getElementById('upSt').className = 'st st-info';
-    document.getElementById('dbStatus').textContent = '💾 已加载 ' + ships.length + ' 条数据';
+    document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot"></span>💾 已加载 ' + ships.length + ' 条数据';
     ['dl','dDate','dDate3'].forEach(function(id) {
       var sel = document.getElementById(id);
       sel.innerHTML = '<option value="">— 选择 —</option>';
@@ -1487,7 +1494,7 @@ async function seedAccounts() {
       document.getElementById('dDate3').value = curDate;
       document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 在线数据 ' + ships.length + ' 条';
       document.getElementById('upSt').className = 'st st-info';
-      document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedShips.length + ' 条';
+      document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>👀 在线数据 · 共 ' + sharedShips.length + ' 条';
       rd();
       startDashRefresh();
     }
