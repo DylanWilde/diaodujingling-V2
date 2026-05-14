@@ -106,29 +106,6 @@ function listDates() {
   });
 }
 
-function updateDraftDB(date, name, iv, ev, field, val) {
-  return new Promise(function(ok) {
-    if (!db) { ok(false); return; }
-    var tx = db.transaction('ships', 'readwrite');
-    var st = tx.objectStore('ships');
-    var idx = st.index('date');
-    var r = idx.getAll(date);
-    r.onsuccess = function() {
-      var hit = null;
-      (r.result || []).forEach(function(s) {
-        if (s.name === name && s.iv === iv && s.ev === ev) hit = s;
-      });
-      if (hit) {
-        if (field === 'arrival') { hit.arV = val; hit.arRaw = val + ' (手动)'; hit._m = 1; }
-        else if (field === 'eta') { hit.eta = val; }
-        else { hit.drV = val; hit.drRaw = val + ' (手动)'; hit._m = 1; }
-        st.put(hit);
-      }
-    };
-    tx.oncomplete = function() { ok(true); };
-  });
-}
-
 function saveDeclToDB(date, name, iv, ev, data) {
   return new Promise(function(ok) {
     if (!db) { ok(false); return; }
@@ -264,7 +241,7 @@ function parseWorkbook(rows) {
     var row = rows[rowI]; if (!row || !row.length) continue;
     var raw = (cm.sn !== -1 && row[cm.sn]) ? String(row[cm.sn]).trim() : '';
     if (!raw || raw === '0') continue;
-    if (raw.indexOf('下昼夜')>=0 || raw.indexOf('PS:')>=0 || raw.indexOf('集中办公')>=0) continue;
+    if (raw.indexOf('下昼夜')>=0 || raw.indexOf('PS:')>=0 || raw.indexOf('集中办公')>=0 || raw.indexOf('此行不要删除')>=0 || raw.indexOf('（（')>=0) continue;
     var sn = nn(raw); if (!sn) continue;
     var ar = (cm.ad !== -1 && row[cm.ad]) ? String(row[cm.ad]) : '';
     var dr = (cm.dd !== -1 && row[cm.dd]) ? String(row[cm.dd]) : '';
@@ -330,6 +307,13 @@ async function up() {
   el.className = ok ? 'st st-ok' : 'st st-err';
   await refreshDates();
   rd();
+
+  /* 管理员自动发布到线上 */
+  if (ok && getCurrentUser() && getCurrentUser().role === 'admin') {
+    el.innerHTML += ' 🔄 自动发布中...';
+    try { await publishDataSilent(); el.innerHTML += ' ✅ 已同步到线上'; }
+    catch(e) { el.innerHTML += ' ⚠️ 自动发布失败，请手动发布'; }
+  }
 }
 
 /* ═══ 加载 ═══ */
@@ -371,7 +355,7 @@ function gd() {
 }
 
 /* ═══ 搜索 ═══ */
-function findShip(kw) {
+function findShipLocal(kw) {
   if (!ships.length) return null;
   var l = kw.toLowerCase().trim();
   for (var i = 0; i < ships.length; i++) {
@@ -388,20 +372,37 @@ function findShip(kw) {
   return null;
 }
 
+function findShipAll(kw, allData) {
+  var l = kw.toLowerCase().trim();
+  for (var i = 0; i < allData.length; i++) {
+    if (allData[i].name.toLowerCase() === l) return allData[i];
+  }
+  for (var i2 = 0; i2 < allData.length; i2++) {
+    if (allData[i2].name.toLowerCase().indexOf(l) >= 0) return allData[i2];
+  }
+  for (var i3 = 0; i3 < allData.length; i3++) {
+    var iv = (allData[i3].iv||'').toLowerCase();
+    var ev = (allData[i3].ev||'').toLowerCase();
+    if (iv.indexOf(l) >= 0 || ev.indexOf(l) >= 0) return allData[i3];
+  }
+  return null;
+}
+
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function qr() {
+async function qr() {
   var kw = document.getElementById('si').value.trim();
   var el = document.getElementById('sr');
   if (!kw) { el.innerHTML = '请输入船名'; el.className = 'st st-err'; return; }
-  if (!ships.length) { el.innerHTML = '无数据'; el.className = 'st st-err'; return; }
-  var r = findShip(kw);
-  if (!r) { el.innerHTML = '❌ 未找到'; el.className = 'st st-err'; return; }
+  var allData = await getAllData();
+  if (!allData.length) { el.innerHTML = '数据库无数据'; el.className = 'st st-err'; return; }
+  var r = findShipAll(kw, allData);
+  if (!r) { el.innerHTML = '❌ 未找到: ' + esc(kw); el.className = 'st st-err'; return; }
   var a = r.arV != null ? r.arV : (r.arRaw || '—');
   var d = r.drV != null ? r.drV : (r.drRaw || '—');
   var m = r._m ? ' <span class="tg tg-warn">✏️手动</span>' : '';
   el.innerHTML = '<div style="background:#F1F5F9;border-radius:10px;padding:14px">'
-    + '<div style="font-weight:700;margin-bottom:8px">✨ ' + esc(r.name) + m + '</div>'
+    + '<div style="font-weight:700;margin-bottom:8px">✨ ' + esc(r.name) + m + ' <span style="font-weight:400;color:#64748B;font-size:11px">📅 ' + esc(r.date||'') + '</span></div>'
     + '<div class="tw"><table><tr><th>船名</th><th>英文名</th><th>航次</th><th>码头</th><th>抵港吃水</th><th>开航吃水</th><th>上港</th><th>下港</th><th>ETA</th><th>备注</th></tr>'
     + '<tr><td style="font-weight:700">' + esc(r.name) + '</td><td>' + esc(r.en||'') + '</td>'
     + '<td>' + esc(r.iv||r.ev) + '</td><td>' + esc(r.tm) + '</td><td>' + a + '</td><td>' + d + '</td>'
@@ -417,74 +418,6 @@ function checkEditPerm(date) {
   var today = new Date().toISOString().split('T')[0];
   if (date !== today) { alert('🔒 调度员仅可修改当日(' + today + ')数据'); return false; }
   return true;
-}
-
-/* ═══ 修改吃水 ═══ */
-async function ed() {
-  if (!checkEditPerm(curDate)) return;
-  var n = document.getElementById('es').value.trim();
-  var t = document.getElementById('et').value;
-  var v = parseFloat(document.getElementById('ev').value);
-  var el = document.getElementById('em');
-  if (!n) { el.innerHTML = '请输入船名'; el.className = 'st st-err'; return; }
-  if (isNaN(v)) { el.innerHTML = '请输入有效数值'; el.className = 'st st-err'; return; }
-  if (!ships.length) { el.innerHTML = '无数据'; el.className = 'st st-err'; return; }
-  var r = findShip(n);
-  if (!r) { el.innerHTML = '未找到'; el.className = 'st st-err'; return; }
-  if (t === 'arrival') { r.arV = v; r.arRaw = v + ' (手动)'; }
-  else { r.drV = v; r.drRaw = v + ' (手动)'; }
-  r._m = true;
-  await updateDraftDB(curDate, r.name, r.iv, r.ev, t, v);
-  el.innerHTML = '✅ ' + r.name + ' ' + (t==='arrival'?'抵港':'开航') + '吃水 → ' + v + '米（已保存）';
-  el.className = 'st st-ok';
-}
-
-/* ═══ 批量核对 ═══ */
-function bc() {
-  var at = document.getElementById('ab').value;
-  var dt = document.getElementById('db').value;
-  var br = document.getElementById('br');
-  if (!ships.length) { br.innerHTML = ''; return; }
-  function parse(t, ty) {
-    var items = [];
-    var lines = t.trim().split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var l = lines[i].trim(); if (!l) continue;
-      var ps = l.split(/\s+/);
-      var n = ps[0], ud = null;
-      if (ps.length >= 2) {
-        var f = parseFloat(ps[ps.length - 1]);
-        if (!isNaN(f)) { ud = f; n = ps.slice(0, -1).join(' '); }
-      }
-      items.push({ n: n.trim(), ud: ud, ty: ty });
-    }
-    return items;
-  }
-  var items = [];
-  if (at.trim()) items = items.concat(parse(at, 'arrival'));
-  if (dt.trim()) items = items.concat(parse(dt, 'departure'));
-  if (!items.length) { br.innerHTML = ''; return; }
-  var html = '<div class="tw"><table><tr><th>类型</th><th>输入</th><th>匹配</th><th>航次</th><th>输入(m)</th><th>实际(m)</th><th>上港</th><th>下港</th><th>备注</th><th>结果</th></tr>';
-  for (var i = 0; i < items.length; i++) {
-    var it = items[i];
-    var r = findShip(it.n);
-    if (!r) { html += '<tr><td>' + (it.ty==='arrival'?'抵港':'开航') + '</td><td>' + esc(it.n) + '</td><td colspan="8">❌ 未匹配</td></tr>'; continue; }
-    var act = it.ty === 'arrival' ? r.arV : r.drV;
-    var raw = it.ty === 'arrival' ? r.arRaw : r.drRaw;
-    var disp = act != null ? act : (raw || '无');
-    var res = '';
-    if (it.ud != null && act != null) {
-      var df = Math.abs(act - it.ud);
-      res = df <= 0.02 ? '<span class="tg tg-ok">✓ 一致</span>' : '<span class="tg tg-err">✗差' + df.toFixed(3) + 'm</span>';
-    } else if (it.ud == null) { res = '<span class="tg tg-info">仅展示</span>'; }
-    else { res = '<span class="tg tg-warn">无值</span>'; }
-    html += '<tr><td>' + (it.ty==='arrival'?'抵港':'开航') + '</td><td>' + esc(it.n) + '</td>'
-      + '<td style="font-weight:700;color:#2563EB">' + esc(r.name) + (r._m?' ✏️':'') + '</td>'
-      + '<td>' + esc(r.iv||r.ev) + '</td><td>' + (it.ud!=null?it.ud:'—') + '</td><td>' + disp + '</td>'
-      + '<td>' + esc(r.pp) + '</td><td>' + esc(r.np) + '</td><td>' + esc(r.rm) + '</td><td>' + res + '</td></tr>';
-  }
-  html += '</table></div>';
-  br.innerHTML = html;
 }
 
 /* ═══ 导出 ═══ */
@@ -601,13 +534,12 @@ function rd() {
     html += '<div class="tc-col"><h3>' + esc(label) + ' <span>' + grp.length + '</span></h3>';
     for (var i = 0; i < grp.length; i++) {
       var sh = grp[i];
-      var ha = sh.arV != null, hd = sh.drV != null;
       var etaHours = getETAHours(sh.eta);
-      var tags = '';
-      if (ha) tags += '<span class="tag tag-arr">抵' + sh.arV + 'm</span>';
-      if (hd) tags += '<span class="tag tag-dep">开' + sh.drV + 'm</span>';
-      if (etaHours >= 0 && etaHours <= 24) tags += '<span class="eta-tag eta-red">24h</span>';
-      else if (etaHours > 24 && etaHours <= 48) tags += '<span class="eta-tag eta-orange">48h</span>';
+      var aria = sh.arV != null ? sh.arV : (sh.arRaw||'—');
+      var dria = sh.drV != null ? sh.drV : (sh.drRaw||'—');
+      var arrivalDisplay = sh.arV != null ? '抵' + sh.arV + 'm' : (sh.arRaw ? '抵' + aria + 'm' : '');
+      var departDisplay = sh.drV != null ? '开' + sh.drV + 'm' : (sh.drRaw ? '开' + dria + 'm' : '');
+      var voyageDisplay = (sh.iv || sh.ev) ? esc(sh.iv||'') + '/' + esc(sh.ev||'') : '';
 
       var key = sh.name + '|' + (sh.iv||'') + '|' + (sh.ev||'');
       var shipInfo = SHIP_MAP[sh.name];
@@ -615,15 +547,23 @@ function rd() {
       var imoNumber = shipInfo && shipInfo.imo ? shipInfo.imo : '';
       var imoDisplay = imoNumber ? 'IMO' + imoNumber : '';
 
-      html += '<div class="sc" style="cursor:pointer;background:#F0F7FF" onclick="openShipModal(\'' + (sh.name||'').replace(/'/g,"\\'") + '\',\'' + imoNumber + '\',\'' + (matchedEn||'').replace(/'/g,"\\'") + '\')" title="点击查看船舶实时动态">'
-        + '<div class="sn"><span>' + esc(sh.name) + '</span><span class="tags">' + tags + '</span></div>'
-        + '<div class="info">'
-        + (sh.iv ? '航次 <b>' + esc(sh.iv) + '/' + esc(sh.ev) + '</b> · ' : '')
-        + 'ETA: <b>' + fmtETA(sh.eta) + '</b>'
-        + '<br>🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b>'
-        + (sh.rm !== '—' ? ' · ' + esc(sh.rm) : '')
-        + (sh.maritime7By ? '<br><span style="font-size:9px;color:#16A34A">✅ 海事已确认 by ' + esc(sh.maritime7By) + '</span>' : '')
-        + '</div></div>';
+      html += '<div class="sc sc-big" style="cursor:pointer" onclick="openShipModal(\'' + (sh.name||'').replace(/'/g,"\\'") + '\',\'' + imoNumber + '\',\'' + (matchedEn||'').replace(/'/g,"\\'") + '\')" title="点击查看船舶实时动态">'
+        + '<div class="sn-big">'
+        + '<span class="sn-name">' + esc(sh.name) + '</span>'
+        + '<span class="sn-drafts">'
+        + (arrivalDisplay ? '<span class="tag tag-arr">' + arrivalDisplay + '</span>' : '')
+        + (departDisplay ? '<span class="tag tag-dep">' + departDisplay + '</span>' : '')
+        + '</span>'
+        + '</div>'
+        + (voyageDisplay ? '<div class="info-voyage">航次 <b>' + voyageDisplay + '</b></div>' : '')
+        + '<div class="info-eta">⏰ ETA: <b>' + fmtETA(sh.eta) + '</b>'
+        + (etaHours >= 0 && etaHours <= 24 ? ' <span class="eta-tag eta-red">24h</span>' : '')
+        + (etaHours > 24 && etaHours <= 48 ? ' <span class="eta-tag eta-orange">48h</span>' : '')
+        + '</div>'
+        + '<div class="info-route">🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b></div>'
+        + (sh.rm && sh.rm !== '—' ? '<div class="info-remark">📝 ' + esc(sh.rm) + '</div>' : '')
+        + (sh.maritime7By ? '<div class="info-confirm">✅ 海事已确认 by ' + esc(sh.maritime7By) + '</div>' : '')
+        + '</div>';
     }
     html += '</div>';
   }
@@ -781,6 +721,9 @@ function sw(i) {
 
   if (i === 0) { rd(); startDashRefresh(); }
   else { if (dashRefreshTimer) { clearInterval(dashRefreshTimer); dashRefreshTimer = null; } }
+
+  /* 离开黑板Tab时停止轮询 */
+  if (i !== 3 && typeof stopBBPoll === 'function') stopBBPoll();
 
   if (i === 1) rd3();
   if (i === 2) {} /* 海图已是静态HTML */
@@ -1094,6 +1037,7 @@ var SHARED_DATA_URL = 'https://dylanwilde.github.io/' + APP_CONFIG.githubRepo + 
 var PRE_CONFIG_TOKEN = '';
 var isViewerMode = false;
 var sharedShips = [];
+var sharedBB = [];
 
 function base64Encode(str) {
   return btoa(unescape(encodeURIComponent(str)));
@@ -1110,14 +1054,16 @@ async function publishData() {
   }
   var token = atob(tokenEnc);
 
-  var data = await getAllData();
-  if (!data.length) { alert('暂无数据可发布'); return; }
+  var allData = await getAllData();
+  if (!allData.length) { alert('暂无数据可发布'); return; }
 
   var btn = document.querySelector('#adminArea button');
   btn.textContent = '⏳ 发布中...'; btn.disabled = true;
 
   try {
-    var content = base64Encode(JSON.stringify(data, null, 2));
+    var bbData = await getAllBBMessages();
+    var payload = { ships: allData, blackboard: bbData, updated: Date.now() };
+    var content = base64Encode(JSON.stringify(payload, null, 2));
     var sha = null;
 
     try {
@@ -1142,8 +1088,8 @@ async function publishData() {
 
     var result = await r2.json();
     if (r2.ok) {
-      alert('✅ 发布成功！\n已推送 ' + data.length + ' 条船舶数据到线上。\nGitHub Pages 约1-2分钟后生效。');
-      document.getElementById('dbStatus').textContent = '📤 已发布 ' + data.length + ' 条到线上';
+      alert('✅ 发布成功！\n已推送 ' + allData.length + ' 条船舶数据到线上。\nGitHub Pages 约1-2分钟后生效。');
+      document.getElementById('dbStatus').textContent = '📤 已发布 ' + allData.length + ' 条到线上';
     } else {
       alert('❌ 发布失败：' + (result.message || '未知错误'));
     }
@@ -1154,6 +1100,42 @@ async function publishData() {
   btn.textContent = '📤 发布到线上'; btn.disabled = false;
 }
 
+async function publishDataSilent() {
+  var tokenEnc = localStorage.getItem('gh_token_enc');
+  if (!tokenEnc) throw new Error('no token');
+  var token = atob(tokenEnc);
+
+  var allData = await getAllData();
+  if (!allData.length) throw new Error('no data');
+
+  var bbData = await getAllBBMessages();
+  var payload = { ships: allData, blackboard: bbData, updated: Date.now() };
+  var content = base64Encode(JSON.stringify(payload, null, 2));
+  var sha = null;
+
+  try {
+    var r1 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+      headers: { 'Authorization': 'token ' + token }
+    });
+    if (r1.ok) { var info = await r1.json(); sha = info.sha; }
+  } catch(e) {}
+
+  var body = {
+    message: '🚢 调度精灵数据更新 ' + new Date().toISOString().slice(0, 10),
+    content: content,
+    branch: APP_CONFIG.githubBranch
+  };
+  if (sha) body.sha = sha;
+
+  var r2 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+    method: 'PUT',
+    headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r2.ok) throw new Error('publish failed');
+  document.getElementById('dbStatus').textContent = '📤 已发布 ' + allData.length + ' 条船舶数据';
+}
+
 async function tryLoadSharedData() {
   try {
     var controller = new AbortController();
@@ -1162,12 +1144,15 @@ async function tryLoadSharedData() {
     clearTimeout(timeout);
     if (!resp.ok) return null;
     var data = await resp.json();
-    if (Array.isArray(data) && data.length) return data;
+    /* 兼容旧格式 (纯数组) 和新格式 ({ ships, blackboard }) */
+    if (Array.isArray(data)) return { ships: data, blackboard: [] };
+    if (data && data.ships) return data;
   } catch(e) {}
   return null;
 }
 
-function fillSharedDateSelect(data, selId) {
+function fillSharedDateSelect(payload, selId) {
+  var data = Array.isArray(payload) ? payload : (payload.ships || []);
   var dates = {};
   data.forEach(function(s) { if (s.date) dates[s.date] = true; });
   var list = Object.keys(dates).sort().reverse();
@@ -1180,25 +1165,26 @@ function fillSharedDateSelect(data, selId) {
   return list[0] || '';
 }
 
-function enterViewerMode(sharedData) {
+function enterViewerMode(payload) {
   isViewerMode = true;
-  sharedShips = sharedData;
+  sharedShips = payload.ships || [];
+  sharedBB = payload.blackboard || [];
 
   document.getElementById('tbAdmin2').style.display = 'none';
   document.getElementById('tbAdmin3').style.display = 'none';
 
-  var latest = fillSharedDateSelect(sharedData, 'dDate');
-  fillSharedDateSelect(sharedData, 'dDate3');
+  var latest = fillSharedDateSelect(payload, 'dDate');
+  fillSharedDateSelect(payload, 'dDate3');
   if (latest) {
     curDate = latest;
-    ships = sharedData.filter(function(s) { return s.date === latest; });
+    ships = sharedShips.filter(function(s) { return s.date === latest; });
     ships.forEach(function(s) {
       s.eta = s.eta || '';
       s.maritime7 = !!s.maritime7;
       s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || '';
     });
     rd();
-    document.getElementById('dbStatus').textContent = '👀 访客模式 · 共 ' + sharedData.length + ' 条共享数据';
+    document.getElementById('dbStatus').textContent = '👀 访客模式 · 共 ' + sharedShips.length + ' 条共享数据';
   } else {
     document.getElementById('dg').innerHTML = '<div class="st-big">📭 暂无共享数据，请联系管理员</div>';
     document.getElementById('dg3').innerHTML = '';
@@ -1369,21 +1355,55 @@ function renderShipCard(data, name, imo, ft, body) {
 
 function closeModal(){ document.getElementById('shipModal').classList.remove('on'); }
 
+/* ═══ 预置账号 ═══ */
+async function seedAccounts() {
+  var d = db;
+  if (!d) return;
+  var presetUsers = [
+    { username: '姜磊', password: simpleHash('888'), role: 'admin' },
+    { username: '冯磊', password: simpleHash('888'), role: 'dispatcher' },
+    { username: '赵逢时', password: simpleHash('888'), role: 'dispatcher' },
+    { username: '丁思樑', password: simpleHash('888'), role: 'dispatcher' },
+    { username: '肖明', password: simpleHash('888'), role: 'dispatcher' },
+    { username: '沈正阳', password: simpleHash('888'), role: 'dispatcher' }
+  ];
+  var tx = d.transaction('accounts', 'readwrite');
+  var st = tx.objectStore('accounts');
+  for (var i = 0; i < presetUsers.length; i++) {
+    var pu = presetUsers[i];
+    await new Promise(function(ok) {
+      var r = st.get(pu.username);
+      r.onsuccess = function() {
+        if (!r.result) {
+          st.add({ username: pu.username, password: pu.password, role: pu.role, created: Date.now() });
+        }
+        ok();
+      };
+      r.onerror = function() { ok(); };
+    });
+  }
+  await new Promise(function(ok) { tx.oncomplete = function() { ok(); }; });
+}
+
 /* ═══ 启动 ═══ */
 (async function() {
   var sharedData = await tryLoadSharedData();
 
   /* 预加载共享数据 */
   if (sharedData) {
-    sharedShips = sharedData;
+    sharedShips = sharedData.ships || [];
+    sharedBB = sharedData.blackboard || [];
     fillSharedDateSelect(sharedData, 'dDate');
     fillSharedDateSelect(sharedData, 'dDate3');
-    document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedData.length + ' 条';
+    document.getElementById('dbStatus').textContent = '👀 在线数据 · 共 ' + sharedShips.length + ' 条';
   }
 
   var today = new Date().toISOString().split('T')[0];
   document.getElementById('sd').value = today;
   await opDB();
+
+  /* 预置调度员和经理账号 */
+  await seedAccounts();
 
   /* 尝试自动登录 */
   var savedUser = localStorage.getItem('dispatch_user');

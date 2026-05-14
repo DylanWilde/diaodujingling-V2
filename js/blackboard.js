@@ -168,6 +168,67 @@ async function delBB(id) {
   }
 }
 
+/* 获取全部黑板消息（用于发布） */
+function getAllBBMessages() {
+  return new Promise(function(ok) {
+    var d = getBBDB();
+    if (!d) { ok([]); return; }
+    try {
+      var tx = d.transaction('blackboard', 'readonly');
+      var st = tx.objectStore('blackboard');
+      var r = st.getAll();
+      r.onsuccess = function() { ok(r.result || []); };
+      r.onerror = function() { ok([]); };
+    } catch(e) { ok([]); }
+  });
+}
+
+var bbPollTimer = null;
+
+function mergeBBMessages(local, shared) {
+  var map = {};
+  var result = [];
+  /* 先加本地消息 */
+  for (var i = 0; i < local.length; i++) {
+    var m = local[i];
+    var key = (m.author||'') + '|' + (m.message||'') + '|' + (m.ts||0);
+    map[key] = true;
+    result.push(m);
+  }
+  /* 合并共享消息 */
+  for (var j = 0; j < shared.length; j++) {
+    var sm = shared[j];
+    if (sm.date !== bbDate) continue;
+    var key2 = (sm.author||'') + '|' + (sm.message||'') + '|' + (sm.ts||0);
+    if (!map[key2]) {
+      map[key2] = true;
+      result.push(sm);
+    }
+  }
+  result.sort(function(a, b) { return (a.ts || 0) - (b.ts || 0); });
+  return result;
+}
+
+async function bbPollShared() {
+  try {
+    var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now());
+    if (!resp.ok) return;
+    var data = await resp.json();
+    var bb = [];
+    if (Array.isArray(data)) { /* legacy format, no BB */ }
+    else if (data && data.blackboard) { bb = data.blackboard; }
+    if (bb.length) {
+      sharedBB = bb;
+      var local = await loadBBMessages(bbDate);
+      var merged = mergeBBMessages(local, sharedBB);
+      if (merged.length !== bbMessages.length) {
+        bbMessages = merged;
+        renderBlackboard();
+      }
+    }
+  } catch(e) {}
+}
+
 /* Tab切换时初始化小黑板 */
 async function initBlackboard() {
   /* 设置默认日期 */
@@ -180,7 +241,7 @@ async function initBlackboard() {
     /* 填充日期选项 */
     if (sel.options.length <= 1) {
       var dates = await listDates();
-      if (sharedShips.length) {
+      if (typeof sharedShips !== 'undefined' && sharedShips.length) {
         var sd = {};
         sharedShips.forEach(function(s) { if (s.date) sd[s.date] = true; });
         dates = Object.keys(sd).sort().reverse();
@@ -192,6 +253,16 @@ async function initBlackboard() {
       sel.value = bbDate;
     }
   }
-  bbMessages = await loadBBMessages(bbDate);
+  var local = await loadBBMessages(bbDate);
+  bbMessages = mergeBBMessages(local, sharedBB);
   renderBlackboard();
+
+  /* 启动实时轮询（每8秒） */
+  if (bbPollTimer) clearInterval(bbPollTimer);
+  bbPollTimer = setInterval(function() { bbPollShared(); }, 8000);
+}
+
+/* 停止轮询（Tab切换时调用） */
+function stopBBPoll() {
+  if (bbPollTimer) { clearInterval(bbPollTimer); bbPollTimer = null; }
 }

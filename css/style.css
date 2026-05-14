@@ -71,6 +71,22 @@ tr:hover td{background:#F1F5F9}
 .sc .info{font-size:11px;color:#64748B;margin-top:4px;line-height:1.5}
 .sc .info b{color:#0F172A}
 
+/* 大卡片布局 V6 */
+.sc-big{padding:14px 16px;margin-bottom:10px;border-radius:12px}
+.sc-big:hover{border-color:#2563EB;box-shadow:0 2px 8px rgba(37,99,235,.1)}
+.sn-big{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.sn-name{font-size:15px;font-weight:800;color:#0F172A}
+.sn-drafts{display:flex;gap:4px;flex-shrink:0}
+.sn-drafts .tag{padding:2px 10px;font-size:11px}
+.info-voyage{font-size:12px;color:#475569;margin-bottom:4px}
+.info-voyage b{color:#0F172A}
+.info-eta{font-size:17px;font-weight:800;color:#2563EB;margin-bottom:4px;padding:4px 0}
+.info-eta b{font-size:18px}
+.info-route{font-size:13px;color:#475569;margin-bottom:4px}
+.info-route b{color:#0F172A}
+.info-remark{font-size:11px;color:#64748B;margin-top:6px;padding-top:6px;border-top:1px dashed #E2E8F0;line-height:1.5}
+.info-confirm{font-size:10px;color:#16A34A;margin-top:4px;font-weight:600}
+
 /* ETA预警颜色 */
 .sc-eta-ok{border-left:4px solid #16A34A}
 .sc-eta-warn{background:#FFF7ED;border:1px solid #F97316;border-left:4px solid #F97316}
