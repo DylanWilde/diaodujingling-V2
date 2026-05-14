@@ -274,6 +274,9 @@ async function up() {
   curDate = document.getElementById('sd').value;
   if (!curDate) { alert('请先选择日期'); return; }
   if (!checkEditPerm(curDate)) return;
+  /* 检查该日期是否已有数据，提示覆盖 */
+  var existing = await loadDateData(curDate);
+  if (existing.length && !confirm('⚠️ ' + curDate + ' 已有 ' + existing.length + ' 条船期数据，新上传将覆盖旧数据。\n\n相同日期仅保留最新的一份船期表。\n\n确定继续？')) return;
   var el = document.getElementById('upSt');
   el.innerHTML = '⏳ 解析中...'; el.className = 'st st-info';
   var all = [];
@@ -388,6 +391,27 @@ function findShipAll(kw, allData) {
   return null;
 }
 
+function findAllShips(kw, allData) {
+  var l = kw.toLowerCase().trim();
+  var exact = [];
+  var partial = [];
+  var voyage = [];
+  var seen = {};
+  for (var i = 0; i < allData.length; i++) {
+    var s = allData[i];
+    var key = s.name + '|' + s.date + '|' + (s.iv||'') + '|' + (s.ev||'');
+    if (seen[key]) continue;
+    var nameLow = s.name.toLowerCase();
+    var ivLow = (s.iv||'').toLowerCase();
+    var evLow = (s.ev||'').toLowerCase();
+    var enLow = (s.en||'').toLowerCase();
+    if (nameLow === l) { exact.push(s); seen[key] = true; }
+    else if (nameLow.indexOf(l) >= 0 || enLow.indexOf(l) >= 0) { partial.push(s); seen[key] = true; }
+    else if (ivLow.indexOf(l) >= 0 || evLow.indexOf(l) >= 0) { voyage.push(s); seen[key] = true; }
+  }
+  return exact.concat(partial).concat(voyage);
+}
+
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function qr() {
@@ -396,17 +420,22 @@ async function qr() {
   if (!kw) { el.innerHTML = '请输入船名'; el.className = 'st st-err'; return; }
   var allData = await getAllData();
   if (!allData.length) { el.innerHTML = '数据库无数据'; el.className = 'st st-err'; return; }
-  var r = findShipAll(kw, allData);
-  if (!r) { el.innerHTML = '❌ 未找到: ' + esc(kw); el.className = 'st st-err'; return; }
-  var a = r.arV != null ? r.arV : (r.arRaw || '—');
-  var d = r.drV != null ? r.drV : (r.drRaw || '—');
-  var m = r._m ? ' <span class="tg tg-warn">✏️手动</span>' : '';
-  el.innerHTML = '<div style="background:#F1F5F9;border-radius:10px;padding:14px">'
-    + '<div style="font-weight:700;margin-bottom:8px">✨ ' + esc(r.name) + m + ' <span style="font-weight:400;color:#64748B;font-size:11px">📅 ' + esc(r.date||'') + '</span></div>'
-    + '<div class="tw"><table><tr><th>船名</th><th>英文名</th><th>航次</th><th>码头</th><th>抵港吃水</th><th>开航吃水</th><th>上港</th><th>下港</th><th>ETA</th><th>备注</th></tr>'
-    + '<tr><td style="font-weight:700">' + esc(r.name) + '</td><td>' + esc(r.en||'') + '</td>'
-    + '<td>' + esc(r.iv||r.ev) + '</td><td>' + esc(r.tm) + '</td><td>' + a + '</td><td>' + d + '</td>'
-    + '<td>' + esc(r.pp) + '</td><td>' + esc(r.np) + '</td><td>' + esc(r.eta||'') + '</td><td>' + esc(r.rm) + '</td></tr></table></div></div>';
+  var results = findAllShips(kw, allData);
+  if (!results.length) { el.innerHTML = '❌ 未找到: ' + esc(kw); el.className = 'st st-err'; return; }
+  var html = '<div style="background:#F1F5F9;border-radius:10px;padding:14px"><div style="font-weight:700;margin-bottom:8px">🔍 找到 ' + results.length + ' 条匹配</div>'
+    + '<div class="tw"><table><tr><th>日期</th><th>船名</th><th>英文名</th><th>航次</th><th>码头</th><th>抵港吃水</th><th>开航吃水</th><th>上港</th><th>下港</th><th>ETA</th><th>备注</th></tr>';
+  for (var ri = 0; ri < results.length; ri++) {
+    var r = results[ri];
+    var a = r.arV != null ? r.arV : (r.arRaw || '—');
+    var d = r.drV != null ? r.drV : (r.drRaw || '—');
+    var m = r._m ? ' <span class="tg tg-warn">✏️手动</span>' : '';
+    var ivEv = esc(r.iv||'') + (r.iv && r.ev ? '/' : '') + esc(r.ev||'');
+    html += '<tr><td>' + esc(r.date||'') + '</td><td style="font-weight:700">' + esc(r.name) + m + '</td><td>' + esc(r.en||'') + '</td>'
+      + '<td>' + ivEv + '</td><td>' + esc(r.tm||'') + '</td><td>' + a + '</td><td>' + d + '</td>'
+      + '<td>' + esc(r.pp||'') + '</td><td>' + esc(r.np||'') + '</td><td>' + esc(r.eta||'') + '</td><td>' + esc(r.rm||'') + '</td></tr>';
+  }
+  html += '</table></div></div>';
+  el.innerHTML = html;
   el.className = '';
 }
 
@@ -492,16 +521,16 @@ function rd() {
     filtered = filtered.filter(function(s) { return (s.tm||'') === dockFilter; });
   }
 
-  /* 新统计: 代理船舶数 / 24h预抵(ETA≤24h) / 48h预抵(ETA≤48h) / 码头数 */
-  var count24h = 0, count48h = 0;
+  /* 新统计: 代理船舶数 / 24h预抵(ETA≤24h) / 72小时预抵(ETA≤72h) / 码头数 */
+  var count24h = 0, count72h = 0;
   filtered.forEach(function(s) {
     var hours = getETAHours(s.eta);
     if (hours >= 0 && hours <= 24) count24h++;
-    if (hours >= 0 && hours <= 48) count48h++;
+    if (hours >= 0 && hours <= 72) count72h++;
   });
   document.getElementById('stT').textContent = filtered.length;
   document.getElementById('stA').textContent = count24h;
-  document.getElementById('stD').textContent = count48h;
+  document.getElementById('stD').textContent = count72h;
   var terms = {};
   filtered.forEach(function(s){ if (s.tm) terms[s.tm] = true; });
   document.getElementById('stM').textContent = Object.keys(terms).length;
@@ -509,7 +538,7 @@ function rd() {
   if (typeof animateCount === 'function') {
     animateCount(document.getElementById('stT'), filtered.length);
     animateCount(document.getElementById('stA'), count24h);
-    animateCount(document.getElementById('stD'), count48h);
+    animateCount(document.getElementById('stD'), count72h);
     animateCount(document.getElementById('stM'), Object.keys(terms).length);
   }
 
@@ -553,23 +582,22 @@ function rd() {
       var matchedEn = sh.en || (shipInfo ? shipInfo.en : '');
       var imoNumber = shipInfo && shipInfo.imo ? shipInfo.imo : '';
       var imoDisplay = imoNumber ? 'IMO' + imoNumber : '';
+	      var draftLine = '';
+	      if (arrivalDisplay || departDisplay) {
+	        draftLine = '<div class="info-draft">吃水: ' + (arrivalDisplay || '—') + ' / ' + (departDisplay || '—') + '</div>';
+	      }
 
       html += '<div class="sc sc-big" style="cursor:pointer" onclick="openShipModal(\'' + (sh.name||'').replace(/'/g,"\\'") + '\',\'' + imoNumber + '\',\'' + (matchedEn||'').replace(/'/g,"\\'") + '\')" title="点击查看船舶实时动态">'
-        + '<div class="sn-big">'
-        + '<span class="sn-name">' + esc(sh.name) + '</span>'
-        + '<span class="sn-drafts">'
-        + (arrivalDisplay ? '<span class="tag tag-arr">' + arrivalDisplay + '</span>' : '')
-        + (departDisplay ? '<span class="tag tag-dep">' + departDisplay + '</span>' : '')
-        + '</span>'
-        + '</div>'
-        + (voyageDisplay ? '<div class="info-voyage">航次 <b>' + voyageDisplay + '</b></div>' : '')
-        + '<div class="info-eta">⏰ ETA: <b>' + fmtETA(sh.eta) + '</b>'
+        + '<div class="sn-name">' + esc(sh.name) + '</div>'
+        + (voyageDisplay ? '<div class="info-voyage">航次: <b>' + voyageDisplay + '</b></div>' : '')
+        + draftLine
+        + '<div class="info-eta">ETA: <b>' + fmtETA(sh.eta) + '</b>'
         + (etaHours >= 0 && etaHours <= 24 ? ' <span class="eta-tag eta-red">24h</span>' : '')
-        + (etaHours > 24 && etaHours <= 48 ? ' <span class="eta-tag eta-orange">48h</span>' : '')
+        + (etaHours > 24 && etaHours <= 72 ? ' <span class="eta-tag eta-orange">72h</span>' : '')
         + '</div>'
-        + '<div class="info-route">🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b></div>'
-        + (sh.rm && sh.rm !== '—' ? '<div class="info-remark">📝 ' + esc(sh.rm) + '</div>' : '')
-        + (sh.maritime7By ? '<div class="info-confirm">✅ 海事已确认 by ' + esc(sh.maritime7By) + '</div>' : '')
+        + '<div class="info-route"><b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b></div>'
+        + (sh.rm && sh.rm !== '—' ? '<div class="info-remark">' + esc(sh.rm) + '</div>' : '')
+        + (sh.maritime7By ? '<div class="info-confirm">海事已确认 by ' + esc(sh.maritime7By) + '</div>' : '')
         + '</div>';
     }
     html += '</div>';
@@ -885,30 +913,34 @@ function rd3() {
       var sh = grp[i];
       var alert = getETAAlertLevel(sh.eta);
 
-      var etaTag = '';
-      if (alert === 'danger') etaTag = '<span class="eta-tag eta-red">🔴 <24h</span>';
-      else if (alert === 'warn') etaTag = '<span class="eta-tag eta-orange">🟠 <48h</span>';
-      else if (alert === 'ok') etaTag = '<span class="eta-tag eta-ok">🟢 >48h</span>';
-      else if (alert === 'expired') etaTag = '<span class="eta-tag" style="background:#E5E7EB;color:#6B7280">⚫ 已过</span>';
+      var maritimeDone = sh.maritime7;
+      var hoursLeft = getETAHours(sh.eta);
+      var cardStatusColor = '';
+      var statusText = '';
+      if (maritimeDone) {
+        cardStatusColor = 'sc-maritime-done';
+        statusText = '<span class="eta-tag eta-green">\u5df2\u7533\u62a5</span>';
+      } else if (hoursLeft >= 0 && hoursLeft < 24) {
+        cardStatusColor = 'sc-maritime-danger';
+        statusText = '<span class="eta-tag eta-red">\u26a0 24h\u5185\u5f85\u62a5</span>';
+      } else {
+        cardStatusColor = 'sc-maritime-warn';
+        statusText = '<span class="eta-tag eta-orange">\u5f85\u7533\u62a5</span>';
+      }
+      var cardClass = 'sc ' + cardStatusColor;
 
-      var cardClass = 'sc';
-      if (alert === 'danger') cardClass += ' sc-eta-danger';
-      else if (alert === 'warn') cardClass += ' sc-eta-warn';
-      else if (alert === 'ok') cardClass += ' sc-eta-ok';
-      else cardClass += ' sc-eta-ok';
-
-      var m7Icon = sh.maritime7 ? '✅' : '⬜';
+      var m7Icon = sh.maritime7 ? '🟢' : (hoursLeft >= 0 && hoursLeft < 24 ? '🔴' : '🟠');
       var m7Note = sh.maritime7Note ? ' <span style="color:#64748B;font-size:9px">(' + esc(sh.maritime7Note) + ')</span>' : '';
 
       html += '<div class="' + cardClass + '" style="cursor:pointer" onclick="openDeclModal(\'' + esc(sh.name.replace(/'/g,"\\'")) + '\',\'' + esc((sh.iv||'').replace(/'/g,"\\'")) + '\',\'' + esc((sh.ev||'').replace(/'/g,"\\'")) + '\')" title="点击确认7日海事">'
         + '<div class="sn">'
         + '<span>' + esc(sh.name) + '</span>'
-        + '<span>' + etaTag + '</span>'
+        + '<span>' + statusText + '</span>'
         + '</div>'
         + '<div class="info">'
-        + '📅 ETA: <b>' + fmtETA(sh.eta) + '</b>'
+        + 'ETA: <b>' + fmtETA(sh.eta) + '</b>'
         + (sh.iv ? '<br>航次 <b>' + esc(sh.iv) + '/' + esc(sh.ev) + '</b>' : '')
-        + '<br>🚢 <b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b>'
+        + '<br><b>' + esc(sh.pp) + '</b> → <b>' + esc(sh.np) + '</b>'
         + '</div>'
         + '<div class="decl-status">'
         + '<span class="item ' + (sh.maritime7?'done':'pending') + '">' + m7Icon + ' 7日海事' + m7Note + '</span>'
@@ -1197,6 +1229,30 @@ function enterViewerMode(payload) {
     document.getElementById('dg3').innerHTML = '';
     document.getElementById('dbStatus').textContent = '👀 访客模式 · 暂无数据';
   }
+}
+
+
+/* 天气/拥堵状态设置 */
+var _weatherState = 'normal';
+function setWeather(state) {
+  _weatherState = state;
+  var wEl = document.getElementById('cjWeather');
+  var cEl = document.getElementById('wgqCongestion');
+  var upEl = document.getElementById('weatherUpdated');
+  var now = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
+  if (wEl) {
+    if (state === 'normal') {
+      wEl.textContent = '正常'; wEl.className = 'w-value w-normal';
+      cEl.textContent = '正常'; cEl.className = 'w-value w-normal';
+    } else if (state === 'wind') {
+      wEl.textContent = '大风 (6-7级)'; wEl.className = 'w-value w-danger';
+      cEl.textContent = '正常'; cEl.className = 'w-value w-normal';
+    } else if (state === 'fog') {
+      wEl.textContent = '大雾 (能见度<500m)'; wEl.className = 'w-value w-danger';
+      cEl.textContent = '正常'; cEl.className = 'w-value w-normal';
+    }
+  }
+  if (upEl) upEl.textContent = '更新于 ' + now;
 }
 
 /* ═══════════════════════════════════════════════════

@@ -190,3 +190,25 @@ input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B
 .port-dot-t{display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563EB;margin-right:4px;vertical-align:middle}
 .port-dot-a{display:inline-block;width:10px;height:10px;border-radius:50%;background:#D97706;margin-right:4px;vertical-align:middle}
 
+/* ═══ 天气/拥堵面板 ═══ */
+.weather-card{display:flex;gap:16px;flex-wrap:wrap;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 16px}
+.weather-item{display:flex;align-items:center;gap:6px;font-size:12px}
+.w-label{font-weight:600;color:#475569}
+.w-value{font-weight:700;padding:2px 10px;border-radius:12px;font-size:11px}
+.w-normal{background:#DCFCE7;color:#16A34A}
+.w-danger{background:#FEE2E2;color:#DC2626;animation:etaPulseDanger 2s ease-in-out infinite}
+.w-warn{background:#FEF3C7;color:#D97706}
+
+/* ═══ 海事申报卡片新颜色 ═══ */
+.sc-maritime-done{border-left:4px solid #16A34A;background:#F8FAFC}
+.sc-maritime-danger{border-left:4px solid #DC2626;background:#FFF5F5}
+.sc-maritime-danger:hover{border-color:#DC2626;box-shadow:0 2px 8px rgba(220,38,38,.15)}
+.sc-maritime-warn{border-left:4px solid #F59E0B;background:#FFFDF5}
+.sc-maritime-warn:hover{border-color:#F59E0B;box-shadow:0 2px 8px rgba(245,158,11,.12)}
+
+/* ═══ 吃水信息行 ═══ */
+.info-draft{font-size:12px;color:#475569;margin-bottom:4px;font-weight:500}
+
+/* ═══ 绿色ETA标签(已完成) ═══ */
+.eta-green{background:#DCFCE7;color:#16A34A;border:1px solid #BBF7D0}
+

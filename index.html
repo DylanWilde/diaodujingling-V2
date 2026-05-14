@@ -24,7 +24,7 @@
 
 <div class="tb">
   <button class="tb-btn on" onclick="sw(0)">🗺️ 动态看板</button>
-  <button class="tb-btn" onclick="sw(1)">📋 申报确认</button>
+  <button class="tb-btn" onclick="sw(1)">📋 海事申报</button>
   <button class="tb-btn" onclick="sw(2)">🗺️ 港口海图</button>
   <button class="tb-btn" onclick="sw(3)">📝 调度黑板</button>
   <button class="tb-btn" onclick="sw(4)" id="tbAdmin2">📡 引航转换</button>
@@ -41,9 +41,21 @@
     <p style="color:#64748B;font-size:.8rem;margin:4px 0 14px">选中日期后自动展示 · 自动匹配代理船舶 · 点击卡片跳转船讯网</p>
     <div class="sb">
       <div class="sb-item sb-blue"><div class="n" id="stT">0</div><div class="l">代理船舶数</div></div>
-      <div class="sb-item sb-red"><div class="n" id="stA">0</div><div class="l">24h预抵 ≤24h</div></div>
-      <div class="sb-item sb-amber"><div class="n" id="stD">0</div><div class="l">48h预抵 ≤48h</div></div>
+      <div class="sb-item sb-red"><div class="n" id="stA">0</div><div class="l">24小时预抵</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="stD">0</div><div class="l">72小时预抵</div></div>
       <div class="sb-item sb-green"><div class="n" id="stM">0</div><div class="l">码头数</div></div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end">
+      <div class="weather-card" id="weatherPanel">
+        <div class="weather-item"><span class="w-label">🌊 长江口天气</span><span class="w-value w-normal" id="cjWeather">正常</span></div>
+        <div class="weather-item"><span class="w-label">🏗️ 外高桥拥堵</span><span class="w-value w-normal" id="wgqCongestion">正常</span></div>
+      </div>
+      <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
+        <button class="btn btn-sm btn-s" onclick="setWeather('normal')" title="正常">☀️ 正常</button>
+        <button class="btn btn-sm btn-s" onclick="setWeather('wind')" title="大风">💨 大风</button>
+        <button class="btn btn-sm btn-s" onclick="setWeather('fog')" title="大雾">🌫️ 大雾</button>
+        <span style="font-size:9px;color:#94A3B8;margin-left:4px" id="weatherUpdated"></span>
+      </div>
     </div>
     <div class="r">
       <div class="c"><label>📅 日期</label><select id="dDate" onchange="onDashDate()"><option value="">—选择—</option></select></div>
@@ -62,7 +74,7 @@
 <div id="t3" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h2>📋 申报确认看板 — 按码头分组</h2>
+      <h2>📋 海事申报看板 — 按码头分组</h2>
       <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
         <span class="tg tg-warn" style="font-size:10px">🟠 <48h</span>
         <span class="tg tg-err" style="font-size:10px">🔴 <24h</span>
@@ -163,10 +175,10 @@
 <!-- ════ TAB 3: 管理 ════ -->
 <div id="t1" class="tc">
   <div class="cd">
-    <h2>📂 上传船期表（自动保存到浏览器数据库）</h2>
+    <h2>📂 上传船期表（按日期存储，同日期新数据覆盖旧数据）</h2>
     <div class="uz" onclick="document.getElementById('fu').click()">
       <div style="font-size:1.8rem">📤 点击上传 .xls / .xlsx</div>
-      <div style="font-size:.75rem;color:#64748B;margin-top:4px">自动识别船名/航次/吃水/上下港/码头/英文名/ETA · 上传一次永久保存</div>
+      <div style="font-size:.75rem;color:#64748B;margin-top:4px">自动识别船名/航次/吃水/上下港/码头/英文名/ETA · 每个日期仅保留最新一份 · 上传即覆盖</div>
     </div>
     <input type="file" id="fu" accept=".xls,.xlsx,.xlsm" onchange="up()" multiple style="display:none">
     <div id="upSt" class="st st-info" style="margin-top:10px">等待上传...</div>
@@ -214,11 +226,11 @@
   </div>
 </div>
 
-<!-- 申报确认弹窗 -->
+<!-- 海事申报弹窗 -->
 <div class="modal-overlay decl-modal" id="declModal" onclick="if(event.target===this)closeDeclModal()">
   <div class="modal">
     <div class="modal-hd">
-      <h3 id="declModalTitle">📋 申报确认</h3>
+      <h3 id="declModalTitle">📋 海事申报</h3>
       <button class="modal-close" onclick="closeDeclModal()">✕</button>
     </div>
     <div class="modal-body" id="declModalBody"></div>

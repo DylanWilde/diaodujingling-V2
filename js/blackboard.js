@@ -90,8 +90,16 @@ function renderBlackboard() {
   var el = document.getElementById('bbMsgs');
   if (!el) return;
 
+  /* 游客无法查看聊天室 */
+  var user = getCurrentUser();
+  if (!user) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 40px;color:#94A3B8"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:16px;font-weight:700;color:#475569;margin-bottom:6px">调度聊天室仅限登录用户访问</div><div style="font-size:13px">请点击右上角「管理员登录」进入</div></div>';
+    document.getElementById('bbPermHint').textContent = '🔒 游客无权查看';
+    return;
+  }
+
   if (!bbMessages.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8">📝 暂无提醒，发一条吧~</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94A3B8">📝 暂无消息，发一条吧~</div>';
     return;
   }
 
@@ -231,6 +239,14 @@ async function bbPollShared() {
 
 /* Tab切换时初始化小黑板 */
 async function initBlackboard() {
+  var user = getCurrentUser();
+  var hint = document.getElementById('bbPermHint');
+  if (!user) {
+    renderBlackboard();
+    return;
+  }
+  if (hint) hint.textContent = '👤 ' + user.username + ' · 已登录';
+
   /* 设置默认日期 */
   if (!bbDate) {
     bbDate = curDate || new Date().toISOString().split('T')[0];
