@@ -7,7 +7,7 @@
 var APP_CONFIG = {
   shipxyKey: '97e629f2456c4e00bfa208741d1707f5',   // 船讯网API密钥
   githubOwner: 'DylanWilde',
-  githubRepo: 'diaodujingling-V1',
+  githubRepo: 'diaodujingling-V2',
   githubBranch: 'main',
   dataPath: 'data/ships.json'
 };
