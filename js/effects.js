@@ -59,7 +59,7 @@
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
-          ctx.strokeStyle = 'rgba(59,130,246,' + (0.04 * (1 - dist / 100)) + ')';
+          ctx.strokeStyle = 'rgba(37,99,235,' + (0.04 * (1 - dist / 100)) + ')';
           ctx.lineWidth = 0.4;
           ctx.stroke();
         }
@@ -75,9 +75,9 @@
 
       /* 光晕 */
       var grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
-      grd.addColorStop(0, 'rgba(59,130,246,' + alpha + ')');
-      grd.addColorStop(0.4, 'rgba(6,182,212,' + (alpha * 0.4) + ')');
-      grd.addColorStop(1, 'rgba(6,182,212,0)');
+      grd.addColorStop(0, 'rgba(37,99,235,' + (alpha * 0.35) + ')');
+      grd.addColorStop(0.4, 'rgba(56,189,248,' + (alpha * 0.18) + ')');
+      grd.addColorStop(1, 'rgba(56,189,248,0)');
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
       ctx.fillStyle = grd;
@@ -86,7 +86,7 @@
       /* 核心 */
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(147,197,253,' + (alpha * 1.2) + ')';
+      ctx.fillStyle = 'rgba(37,99,235,' + (alpha * 0.5) + ')';
       ctx.fill();
 
       /* 移动 */
@@ -184,7 +184,7 @@
       var cy = mouseY - rect.top;
       var gradX = (cx / rect.width) * 100;
       var gradY = (cy / rect.height) * 100;
-      card.style.background = 'radial-gradient(circle at ' + gradX + '% ' + gradY + '%, rgba(59,130,246,0.12), rgba(15,36,64,0.55))';
+      card.style.background = 'radial-gradient(circle at ' + gradX + '% ' + gradY + '%, rgba(37,99,235,0.06), #FFFFFF)';
     });
   }
 
