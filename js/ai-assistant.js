@@ -188,7 +188,7 @@ async function aiQuery(query) {
 
   switch (intent) {
     case 'weather':
-      return answerWeather(q, terminal);
+      return await answerWeather(q, terminal);
     case 'tide':
       return answerTide(q, terminal);
     case 'portInfo':
@@ -646,7 +646,7 @@ function addAIMessage(text) {
   var chat = document.getElementById('aiChatMessages');
   var div = document.createElement('div');
   div.className = 'ai-msg ai-msg-bot';
-  div.innerHTML = '<div class="ai-avatar">🧠</div>' +
+  div.innerHTML = '<div class="ai-avatar">⚓</div>' +
     '<div class="ai-bubble ai-bubble-bot">' + formatAIText(text) + '</div>' +
     '<span class="ai-time">' + new Date().toTimeString().slice(0,5) + '</span>';
   chat.appendChild(div);
@@ -657,7 +657,7 @@ function addTypingIndicator() {
   var chat = document.getElementById('aiChatMessages');
   var div = document.createElement('div');
   div.className = 'ai-msg ai-msg-bot ai-typing';
-  div.innerHTML = '<div class="ai-avatar">🧠</div>' +
+  div.innerHTML = '<div class="ai-avatar">⚓</div>' +
     '<div class="ai-bubble ai-bubble-bot"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>';
   chat.appendChild(div);
   scrollChat();

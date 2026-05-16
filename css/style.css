@@ -288,12 +288,40 @@ input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B
 .ai-msg-user { flex-direction: row-reverse; }
 .ai-msg-bot { padding-right: 40px; }
 .ai-avatar {
-  width: 34px; height: 34px;
+  width: 36px; height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #DBEAFE, #BFDBFE);
+  background: linear-gradient(135deg, #FFE0E8 0%, #FFB8C6 100%);
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; flex-shrink: 0;
-  border: 1px solid #BFDBFE;
+  font-size: 15px; flex-shrink: 0;
+  border: 2px solid #F48FB1;
+  box-shadow: 0 2px 10px rgba(244,143,177,.3);
+  position: relative;
+  overflow: visible;
+}
+/* 小船长发 */
+.ai-avatar::before {
+  content: '';
+  position: absolute;
+  top: -4px; left: -2px;
+  width: 40px; height: 20px;
+  background: #3E2723;
+  border-radius: 20px 20px 4px 4px;
+  z-index: 2;
+}
+/* 小锚徽章 */
+.ai-avatar::after {
+  content: '⚓';
+  position: absolute;
+  bottom: -4px; right: -4px;
+  font-size: 11px;
+  background: #fff;
+  border-radius: 50%;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+  z-index: 3;
+  border: 1.5px solid #F48FB1;
 }
 .ai-bubble {
   max-width: 85%;
