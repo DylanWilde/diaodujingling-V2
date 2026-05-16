@@ -189,7 +189,91 @@ function setLLMKey(key) {
 }
 
 function hasLLMKey() {
-  return !!LLM_CONFIG.apiKey;
+  return !!(LLM_CONFIG.apiKey && LLM_CONFIG.apiKey.length > 20);
+}
+
+/* ═══ 连接状态检测 ═══ */
+var LLM_STATUS = 'unknown'; /* unknown | connected | failed */
+
+async function checkLLMConnection() {
+  if (!hasLLMKey()) {
+    LLM_STATUS = 'nokey';
+    updateLLMStatusUI();
+    return;
+  }
+  LLM_STATUS = 'checking';
+  updateLLMStatusUI();
+
+  try {
+    var ctrl = new AbortController();
+    setTimeout(function() { ctrl.abort(); }, 8000);
+    var resp = await fetch(LLM_CONFIG.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + LLM_CONFIG.apiKey
+      },
+      body: JSON.stringify({
+        model: LLM_CONFIG.model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 5
+      }),
+      signal: ctrl.signal
+    });
+    if (resp.ok) {
+      LLM_STATUS = 'connected';
+    } else if (resp.status === 0) {
+      /* CORS blocked */
+      LLM_STATUS = 'cors_blocked';
+    } else {
+      LLM_STATUS = 'failed';
+    }
+  } catch(e) {
+    /* fetch失败通常是被CORS拦截 */
+    if (e.message.indexOf('Failed to fetch') >= 0 || e.name === 'TypeError') {
+      LLM_STATUS = 'cors_blocked';
+    } else {
+      LLM_STATUS = 'failed';
+    }
+  }
+  updateLLMStatusUI();
+}
+
+function updateLLMStatusUI() {
+  var tag = document.getElementById('aiDbStats');
+  if (!tag) return;
+
+  switch (LLM_STATUS) {
+    case 'connected':
+      tag.textContent = '🧠 DeepSeek 已连接';
+      tag.style.background = '#ECFDF5';
+      tag.style.color = '#059669';
+      tag.style.fontWeight = '700';
+      break;
+    case 'checking':
+      tag.textContent = '⏳ 正在连接DeepSeek...';
+      tag.style.background = '#FFFBEB';
+      tag.style.color = '#D97706';
+      tag.style.fontWeight = '400';
+      break;
+    case 'cors_blocked':
+      tag.textContent = '⚠ CORS拦截·需代理';
+      tag.style.background = '#FEF2F2';
+      tag.style.color = '#DC2626';
+      tag.style.fontWeight = '700';
+      break;
+    case 'nokey':
+      tag.textContent = '🔑 未配置API Key';
+      tag.style.background = '#F1F5F9';
+      tag.style.color = '#64748B';
+      tag.style.fontWeight = '400';
+      break;
+    default:
+      tag.textContent = '❌ DeepSeek 未连接';
+      tag.style.background = '#FEF2F2';
+      tag.style.color = '#DC2626';
+      tag.style.fontWeight = '700';
+  }
 }
 
 /* ═══ 构建系统提示词（注入实时数据上下文） ═══ */
@@ -225,37 +309,55 @@ async function buildSystemPrompt() {
     '\n5. 涉及船期时优先引用最新日期(' + latestDate + ')的数据';
 }
 
-/* ═══ 调用大模型API ═══ */
+/* ═══ 调用大模型API（直接 + CORS代理兜底） ═══ */
+var CORS_PROXY = 'https://cors-anywhere-dlwh.onrender.com/';
+
 async function callLLM(userQuery) {
   if (!hasLLMKey()) return null;
 
   var systemPrompt = await buildSystemPrompt();
+  var body = JSON.stringify({
+    model: LLM_CONFIG.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userQuery }
+    ],
+    temperature: 0.7,
+    max_tokens: 1500
+  });
 
+  /* 尝试直连DeepSeek */
+  var result = await tryLLMFetch(LLM_CONFIG.endpoint, body, 10000);
+  if (result) {
+    LLM_STATUS = 'connected';
+    updateLLMStatusUI();
+    return result;
+  }
+
+  /* CORS拦截 — 浏览器阻止了跨域请求 */
+  LLM_STATUS = 'cors_blocked';
+  updateLLMStatusUI();
+  return null;
+}
+
+async function tryLLMFetch(url, body, timeout) {
   try {
     var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 15000);
+    setTimeout(function() { ctrl.abort(); }, timeout);
 
-    var resp = await fetch(LLM_CONFIG.endpoint, {
+    var resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + LLM_CONFIG.apiKey
       },
-      body: JSON.stringify({
-        model: LLM_CONFIG.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuery }
-        ],
-        temperature: 0.7,
-        max_tokens: 1500
-      }),
+      body: body,
       signal: ctrl.signal
     });
 
     if (!resp.ok) {
       var errText = await resp.text().catch(function() { return ''; });
-      throw new Error('API ' + resp.status + ': ' + (errText.slice(0, 100) || 'unknown'));
+      throw new Error('API ' + resp.status);
     }
 
     var data = await resp.json();
@@ -263,11 +365,10 @@ async function callLLM(userQuery) {
       ? data.choices[0].message.content
       : '';
 
-    if (!reply) throw new Error('empty response');
+    if (!reply) throw new Error('empty');
     return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 ' + LLM_CONFIG.provider + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
   } catch(e) {
-    console.log('LLM失败，降级本地引擎：' + e.message);
-    return null; /* 降级到本地引擎 */
+    return null;
   }
 }
 
@@ -706,14 +807,8 @@ function welcomeMessage() {
   var chat = document.getElementById('aiChatMessages');
   if (!chat) return;
 
-  /* 头部标签：醒目标识DeepSeek已连接 */
-  var statTag = document.getElementById('aiDbStats');
-  if (statTag && hasLLMKey()) {
-    statTag.textContent = '🧠 DeepSeek 已连接';
-    statTag.style.background = '#ECFDF5';
-    statTag.style.color = '#059669';
-    statTag.style.fontWeight = '700';
-  }
+  /* 启动连接检测 */
+  checkLLMConnection();
 
   var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置 DeepSeek API Key）';
   var text = '您好！我是 **调度精灵 AI 助手** ⚓\n\n' +
