@@ -175,11 +175,12 @@ function aiGetDates(allData) {
   return Object.keys(dates).sort().reverse();
 }
 
-/* ═══ 大模型配置（默认DeepSeek免费API） ═══ */
+/* ═══ 大模型配置（通过Cloudflare Worker代理绕过CORS） ═══ */
+var LLM_PROXY = 'https://dispatch-ai-proxy.dispatchhub.workers.dev';
 var LLM_CONFIG = {
   apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
-  endpoint: 'https://api.deepseek.com/v1/chat/completions',
+  endpoint: LLM_PROXY,
   provider: 'DeepSeek'
 };
 
