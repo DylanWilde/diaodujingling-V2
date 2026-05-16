@@ -194,7 +194,7 @@ function hasLLMKey() {
 }
 
 /* ═══ 连接状态检测 ═══ */
-var LLM_STATUS = 'unknown'; /* unknown | connected | failed */
+var LLM_STATUS = 'checking'; /* checking | connected | cors_blocked | nokey | failed */
 
 async function checkLLMConnection() {
   if (!hasLLMKey()) {
@@ -808,7 +808,9 @@ function welcomeMessage() {
   var chat = document.getElementById('aiChatMessages');
   if (!chat) return;
 
-  /* 启动连接检测 */
+  /* 先显示检测中 */
+  updateLLMStatusUI();
+  /* 异步检测连接 */
   checkLLMConnection();
 
   var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置 DeepSeek API Key）';
