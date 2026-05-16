@@ -264,6 +264,33 @@ input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B
   font-size: 10px; font-weight: 400; color: #334155;
   background: #F1F5F9; padding: 2px 8px; border-radius: 10px;
 }
+.ai-config-btn {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  font-size: 13px; cursor: pointer;
+  transition: all .2s;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.ai-config-btn:hover { background: #E2E8F0; }
+.ai-config-panel {
+  display: flex; gap: 6px; align-items: center;
+  padding: 6px 16px 8px;
+  background: #FFFBEB;
+  border-bottom: 1px solid #FDE68A;
+}
+.ai-config-panel input {
+  flex: 1;
+  padding: 5px 10px;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fff;
+  outline: none;
+}
+.ai-config-panel input:focus { border-color: #F59E0B; }
 
 /* ═══ 对话区域 — 海图网格背景 ═══ */
 .ai-chat-body {

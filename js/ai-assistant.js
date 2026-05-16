@@ -175,11 +175,114 @@ function aiGetDates(allData) {
   return Object.keys(dates).sort().reverse();
 }
 
-/* ═══ 主查询函数 ═══ */
+/* ═══ 大模型配置（默认DeepSeek免费API） ═══ */
+var LLM_CONFIG = {
+  apiKey: localStorage.getItem('llm_key') || '',
+  model: 'deepseek-chat',
+  endpoint: 'https://api.deepseek.com/v1/chat/completions',
+  provider: 'DeepSeek'
+};
+
+function setLLMKey(key) {
+  LLM_CONFIG.apiKey = key.trim();
+  localStorage.setItem('llm_key', LLM_CONFIG.apiKey);
+}
+
+function hasLLMKey() {
+  return !!LLM_CONFIG.apiKey;
+}
+
+/* ═══ 构建系统提示词（注入实时数据上下文） ═══ */
+async function buildSystemPrompt() {
+  var allData = await aiGetAllData();
+  var dates = aiGetDates(allData);
+  var latestDate = dates[0] || '无数据';
+  var latestShips = allData.filter(function(s) { return s.date === latestDate; });
+  var totalShips = allData.length;
+
+  /* 船舶数据摘要 */
+  var shipSummary = '最新日期：' + latestDate + '，共' + latestShips.length + '艘船';
+  var shipList = latestShips.slice(0, 15).map(function(s) {
+    return s.name + '（' + (s.iv||'') + '/' + (s.ev||'') + '）泊' + (s.tm||'?') + ' ' + (s.pp||'') + '→' + (s.np||'') + ' 吃水' + (s.arV||'?') + '/' + (s.drV||'?') + 'm';
+  }).join('\n');
+
+  /* 天气数据 */
+  var weather = await fetchLiveWeather();
+
+  return '你是「调度精灵」AI助手，服务于上海港中远海运船舶调度。' +
+    '\n\n【实时船舶数据库 — ' + latestDate + '】' +
+    '\n总记录' + totalShips + '条，覆盖' + dates.length + '个日期。最新日船舶：\n' + shipList +
+    (latestShips.length > 15 ? '\n...共' + latestShips.length + '艘（以上为前15艘）' : '') +
+    '\n\n【今日气象】气温' + (weather.temp||'?') + ' 风' + (weather.windDir||'?') + (weather.windSpeed||'?') +
+    ' 浪高' + (weather.waveHeight||'?') + ' 能见度' + (weather.visibility||'?') +
+    ' 天气' + (weather.weatherText||'?') + ' 数据源：' + weather.source +
+    '\n\n【港口知识】洋山深水港(水深17m/全球最大自动化码头)、外高桥(水深12.5m/主力集装箱)、宝山(水深12m/散杂货)、浦东(水深10m/近洋件杂货)。半日潮港，今日洋山高潮06:42(4.2m)/19:15(3.8m)，低潮12:28(1.1m)。' +
+    '\n\n用户将用中文提问。请：' +
+    '\n1. 用专业友好的调度员语气回答' +
+    '\n2. 引用数据库中的真实船名/航次/码头/吃水数据' +
+    '\n3. 如问题超出数据范围，诚实说明并给出建议' +
+    '\n4. 回答简洁有用，适当使用表格和emoji' +
+    '\n5. 涉及船期时优先引用最新日期(' + latestDate + ')的数据';
+}
+
+/* ═══ 调用大模型API ═══ */
+async function callLLM(userQuery) {
+  if (!hasLLMKey()) return null;
+
+  var systemPrompt = await buildSystemPrompt();
+
+  try {
+    var ctrl = new AbortController();
+    setTimeout(function() { ctrl.abort(); }, 15000);
+
+    var resp = await fetch(LLM_CONFIG.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + LLM_CONFIG.apiKey
+      },
+      body: JSON.stringify({
+        model: LLM_CONFIG.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userQuery }
+        ],
+        temperature: 0.7,
+        max_tokens: 1500
+      }),
+      signal: ctrl.signal
+    });
+
+    if (!resp.ok) {
+      var errText = await resp.text().catch(function() { return ''; });
+      throw new Error('API ' + resp.status + ': ' + (errText.slice(0, 100) || 'unknown'));
+    }
+
+    var data = await resp.json();
+    var reply = (data.choices && data.choices[0] && data.choices[0].message)
+      ? data.choices[0].message.content
+      : '';
+
+    if (!reply) throw new Error('empty response');
+    return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 ' + LLM_CONFIG.provider + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
+  } catch(e) {
+    console.log('LLM失败，降级本地引擎：' + e.message);
+    return null; /* 降级到本地引擎 */
+  }
+}
+
+/* ═══ 主查询函数 — DeepSeek优先，本地兜底 ═══ */
 async function aiQuery(query) {
   var q = query.trim();
   if (!q) return { text: '您好，请问有什么可以帮您？' };
 
+  /* 1. 尝试大模型 */
+  if (hasLLMKey()) {
+    var llmResult = await callLLM(q);
+    if (llmResult) return llmResult;
+  }
+
+  /* 2. 降级本地引擎 */
   var intent = detectIntent(q);
   var date = parseDateFromQuery(q);
   var terminal = parseTerminal(q);
@@ -603,10 +706,12 @@ function welcomeMessage() {
   var chat = document.getElementById('aiChatMessages');
   if (!chat) return;
 
+  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置DeepSeekAPI Key获得更强智能）';
   var text = '您好！我是 **调度精灵 AI 助手** ⚓\n\n' +
-    '🔍 **船舶查询**：默认返回最新日期数据（如需查历史日期请明确说明，如"5月9日的船"）\n' +
-    '🌤️ **天气水文**：自动连接 Open-Meteo 全球气象API获取实时数据\n' +
-    '📍 **港口信息**：覆盖洋山、外高桥、宝山、浦东等港区\n\n' +
+    '当前模式：**' + brain + '**\n\n' +
+    '🔍 **船舶查询**：默认返回最新日期数据\n' +
+    '🌤️ **天气水文**：Open-Meteo实时气象 + 港口知识库\n' +
+    '📍 **港口信息**：洋山、外高桥、宝山、浦东\n\n' +
     '👈 点击下方快捷提问，或直接输入您的问题。';
 
   addAIMessage(text);
@@ -683,5 +788,41 @@ function scrollChat() {
     setTimeout(function() { chat.scrollTop = chat.scrollHeight; }, 50);
   }
 }
+
+/* ═══ AI配置面板 ═══ */
+function toggleAIConfig() {
+  var panel = document.getElementById('aiConfigPanel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  var input = document.getElementById('aiApiKey');
+  if (input && panel.style.display !== 'none') {
+    input.value = LLM_CONFIG.apiKey;
+    input.focus();
+  }
+}
+
+function saveAIConfig() {
+  var input = document.getElementById('aiApiKey');
+  var hint = document.getElementById('aiConfigHint');
+  var key = input ? input.value.trim() : '';
+  if (key) {
+    setLLMKey(key);
+    if (hint) { hint.textContent = '✅ DeepSeek大模型已启用'; hint.style.color = '#16A34A'; }
+    setTimeout(function() {
+      var panel = document.getElementById('aiConfigPanel');
+      if (panel) panel.style.display = 'none';
+    }, 800);
+  } else {
+    localStorage.removeItem('llm_key');
+    LLM_CONFIG.apiKey = '';
+    if (hint) { hint.textContent = '已清除Key，使用本地引擎'; hint.style.color = '#64748B'; }
+  }
+}
+
+/* 初始化时恢复已保存的Key */
+(function() {
+  var saved = localStorage.getItem('llm_key');
+  if (saved) LLM_CONFIG.apiKey = saved;
+})();
 
 /* initAIAssistant() 由 app.js 启动代码调用，确保 db 已就绪 */

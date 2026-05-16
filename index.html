@@ -40,6 +40,12 @@
         <div class="ai-status-dot"></div>
         <span>调度精灵 AI · 船舶数据库已连接</span>
         <span class="ai-stat-tag" id="aiDbStats">📅 加载中...</span>
+        <button class="ai-config-btn" id="aiConfigBtn" onclick="toggleAIConfig()" title="AI设置">⚙️</button>
+      </div>
+      <div class="ai-config-panel" id="aiConfigPanel" style="display:none">
+        <input type="password" id="aiApiKey" placeholder="输入DeepSeek API Key（免费注册 platform.deepseek.com）" onkeydown="if(event.key==='Enter')saveAIConfig()">
+        <button class="btn btn-sm btn-p" onclick="saveAIConfig()">💾 保存</button>
+        <span style="font-size:10px;color:#64748B;margin-left:4px" id="aiConfigHint"></span>
       </div>
       <div class="ai-chat-body" id="aiChatMessages"></div>
       <div class="ai-chat-foot">
