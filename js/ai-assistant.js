@@ -706,7 +706,16 @@ function welcomeMessage() {
   var chat = document.getElementById('aiChatMessages');
   if (!chat) return;
 
-  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置DeepSeekAPI Key获得更强智能）';
+  /* 头部标签：醒目标识DeepSeek已连接 */
+  var statTag = document.getElementById('aiDbStats');
+  if (statTag && hasLLMKey()) {
+    statTag.textContent = '🧠 DeepSeek 已连接';
+    statTag.style.background = '#ECFDF5';
+    statTag.style.color = '#059669';
+    statTag.style.fontWeight = '700';
+  }
+
+  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置 DeepSeek API Key）';
   var text = '您好！我是 **调度精灵 AI 助手** ⚓\n\n' +
     '当前模式：**' + brain + '**\n\n' +
     '🔍 **船舶查询**：默认返回最新日期数据\n' +
