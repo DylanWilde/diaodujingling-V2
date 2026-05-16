@@ -217,9 +217,12 @@ async function checkLLMConnection() {
     try {
       var ctrl = new AbortController();
       setTimeout(function() { ctrl.abort(); }, 8000);
+      /* Vercel代理自带Key，不传Authorization避免触发严格预检 */
+      var reqHeaders = { 'Content-Type': 'application/json' };
+      if (proxy.name !== 'Vercel') reqHeaders['Authorization'] = 'Bearer ' + LLM_CONFIG.apiKey;
       var resp = await fetch(proxy.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + LLM_CONFIG.apiKey },
+        headers: reqHeaders,
         body: JSON.stringify({ model: LLM_CONFIG.model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 }),
         signal: ctrl.signal
       });
@@ -307,11 +310,9 @@ async function buildSystemPrompt() {
     '\n5. 涉及船期时优先引用最新日期(' + latestDate + ')的数据';
 }
 
-/* ═══ 调用大模型API ═══ */
+/* ═══ API调用（轻量请求头避免预检） ═══ */
 async function callLLM(userQuery) {
-  if (!hasLLMKey()) return null;
   if (LLM_STATUS !== 'connected') {
-    /* 还没连上，再试一轮 */
     await checkLLMConnection();
     if (LLM_STATUS !== 'connected') return null;
   }
@@ -328,12 +329,18 @@ async function callLLM(userQuery) {
   });
 
   var proxy = LLM_CONFIG.proxies[LLM_CONFIG.currentProxy];
+  /* Vercel代理自带Key，不需要发送Authorization */
+  var headers = { 'Content-Type': 'application/json' };
+  if (proxy.name !== 'Vercel') {
+    headers['Authorization'] = 'Bearer ' + LLM_CONFIG.apiKey;
+  }
+
   try {
     var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 25000);
+    setTimeout(function() { ctrl.abort(); }, 30000);
     var resp = await fetch(proxy.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + LLM_CONFIG.apiKey },
+      headers: headers,
       body: body,
       signal: ctrl.signal
     });
@@ -344,7 +351,6 @@ async function callLLM(userQuery) {
     if (!reply) throw new Error('empty');
     return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 DeepSeek · ' + proxy.name + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
   } catch(e) {
-    /* 当前代理挂了，换下一个 */
     LLM_CONFIG.currentProxy++;
     if (LLM_CONFIG.currentProxy < LLM_CONFIG.proxies.length) {
       LLM_STATUS = 'checking';
