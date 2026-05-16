@@ -175,13 +175,18 @@ function aiGetDates(allData) {
   return Object.keys(dates).sort().reverse();
 }
 
-/* ═══ 大模型配置（通过CORS代理访问DeepSeek） ═══ */
-var LLM_PROXY = 'https://corsproxy.io/?';
+/* ═══ 大模型配置 ═══ */
 var LLM_CONFIG = {
   apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
-  endpoint: LLM_PROXY + encodeURIComponent('https://api.deepseek.com/v1/chat/completions'),
-  provider: 'DeepSeek'
+  provider: 'DeepSeek',
+  /* 多个代理依次尝试（国内优先） */
+  proxies: [
+    { name: '直连', url: 'https://api.deepseek.com/v1/chat/completions' },
+    { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') },
+    { name: 'allorigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') }
+  ],
+  currentProxy: 0
 };
 
 function setLLMKey(key) {
@@ -205,34 +210,29 @@ async function checkLLMConnection() {
   LLM_STATUS = 'checking';
   updateLLMStatusUI();
 
-  try {
-    var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 15000);
-
-    /* 直接通过CORS代理发测试请求 */
-    var resp = await fetch(LLM_CONFIG.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + LLM_CONFIG.apiKey
-      },
-      body: JSON.stringify({
-        model: LLM_CONFIG.model,
-        messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 10
-      }),
-      signal: ctrl.signal
-    });
-
-    if (resp.ok) {
-      LLM_STATUS = 'connected';
-    } else {
-      LLM_STATUS = 'failed';
+  /* 依次测试每个代理 */
+  for (var i = 0; i < LLM_CONFIG.proxies.length; i++) {
+    var proxy = LLM_CONFIG.proxies[i];
+    try {
+      var ctrl = new AbortController();
+      setTimeout(function() { ctrl.abort(); }, 8000);
+      var resp = await fetch(proxy.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + LLM_CONFIG.apiKey },
+        body: JSON.stringify({ model: LLM_CONFIG.model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 }),
+        signal: ctrl.signal
+      });
+      if (resp.ok) {
+        LLM_CONFIG.currentProxy = i;
+        LLM_STATUS = 'connected';
+        updateLLMStatusUI();
+        return;
+      }
+    } catch(e) {
+      console.log(proxy.name + ' 不通: ' + e.message);
     }
-  } catch(e) {
-    LLM_STATUS = 'cors_blocked';
-    console.log('连接检测失败: ' + e.message);
   }
+  LLM_STATUS = 'cors_blocked';
   updateLLMStatusUI();
 }
 
@@ -309,6 +309,11 @@ async function buildSystemPrompt() {
 /* ═══ 调用大模型API ═══ */
 async function callLLM(userQuery) {
   if (!hasLLMKey()) return null;
+  if (LLM_STATUS !== 'connected') {
+    /* 还没连上，再试一轮 */
+    await checkLLMConnection();
+    if (LLM_STATUS !== 'connected') return null;
+  }
 
   var systemPrompt = await buildSystemPrompt();
   var body = JSON.stringify({
@@ -321,38 +326,32 @@ async function callLLM(userQuery) {
     max_tokens: 1500
   });
 
+  var proxy = LLM_CONFIG.proxies[LLM_CONFIG.currentProxy];
   try {
     var ctrl = new AbortController();
     setTimeout(function() { ctrl.abort(); }, 25000);
-
-    var resp = await fetch(LLM_CONFIG.endpoint, {
+    var resp = await fetch(proxy.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + LLM_CONFIG.apiKey
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + LLM_CONFIG.apiKey },
       body: body,
       signal: ctrl.signal
     });
-
-    if (!resp.ok) {
-      var errText = await resp.text().catch(function() { return ''; });
-      throw new Error('API ' + resp.status);
-    }
-
+    if (!resp.ok) throw new Error('API ' + resp.status);
     var data = await resp.json();
     var reply = (data.choices && data.choices[0] && data.choices[0].message)
-      ? data.choices[0].message.content
-      : '';
-
+      ? data.choices[0].message.content : '';
     if (!reply) throw new Error('empty');
-    LLM_STATUS = 'connected';
-    updateLLMStatusUI();
-    return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 ' + LLM_CONFIG.provider + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
+    return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 DeepSeek · ' + proxy.name + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
   } catch(e) {
+    /* 当前代理挂了，换下一个 */
+    LLM_CONFIG.currentProxy++;
+    if (LLM_CONFIG.currentProxy < LLM_CONFIG.proxies.length) {
+      LLM_STATUS = 'checking';
+      updateLLMStatusUI();
+      return await callLLM(userQuery);
+    }
     LLM_STATUS = 'failed';
     updateLLMStatusUI();
-    console.log('LLM调用失败: ' + e.message);
     return null;
   }
 }
