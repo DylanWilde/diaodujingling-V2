@@ -207,7 +207,20 @@ async function checkLLMConnection() {
 
   try {
     var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 8000);
+    setTimeout(function() { ctrl.abort(); }, 10000);
+
+    /* 先用GET测Worker是否可达 */
+    var healthResp = await fetch(LLM_CONFIG.endpoint.replace(/\/$/, '') + '/health', {
+      method: 'GET',
+      signal: ctrl.signal
+    });
+
+    if (!healthResp.ok) throw new Error('Worker unreachable');
+
+    /* Worker可达，测试DeepSeek代理 */
+    var ctrl2 = new AbortController();
+    setTimeout(function() { ctrl2.abort(); }, 15000);
+
     var resp = await fetch(LLM_CONFIG.endpoint, {
       method: 'POST',
       headers: {
@@ -216,26 +229,20 @@ async function checkLLMConnection() {
       },
       body: JSON.stringify({
         model: LLM_CONFIG.model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 5
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 10
       }),
-      signal: ctrl.signal
+      signal: ctrl2.signal
     });
+
     if (resp.ok) {
       LLM_STATUS = 'connected';
-    } else if (resp.status === 0) {
-      /* CORS blocked */
-      LLM_STATUS = 'cors_blocked';
     } else {
       LLM_STATUS = 'failed';
     }
   } catch(e) {
-    /* fetch失败通常是被CORS拦截 */
-    if (e.message.indexOf('Failed to fetch') >= 0 || e.name === 'TypeError') {
-      LLM_STATUS = 'cors_blocked';
-    } else {
-      LLM_STATUS = 'failed';
-    }
+    LLM_STATUS = 'cors_blocked';
+    console.log('连接检测失败: ' + e.message);
   }
   updateLLMStatusUI();
 }
