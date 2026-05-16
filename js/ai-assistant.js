@@ -175,12 +175,12 @@ function aiGetDates(allData) {
   return Object.keys(dates).sort().reverse();
 }
 
-/* ═══ 大模型配置（通过Cloudflare Worker代理绕过CORS） ═══ */
-var LLM_PROXY = 'https://dispatch-proxy.dispatchhub.workers.dev';
+/* ═══ 大模型配置（通过CORS代理访问DeepSeek） ═══ */
+var LLM_PROXY = 'https://corsproxy.io/?';
 var LLM_CONFIG = {
   apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
-  endpoint: LLM_PROXY,
+  endpoint: LLM_PROXY + encodeURIComponent('https://api.deepseek.com/v1/chat/completions'),
   provider: 'DeepSeek'
 };
 
@@ -207,20 +207,9 @@ async function checkLLMConnection() {
 
   try {
     var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 10000);
+    setTimeout(function() { ctrl.abort(); }, 15000);
 
-    /* 先用GET测Worker是否可达 */
-    var healthResp = await fetch(LLM_CONFIG.endpoint.replace(/\/$/, '') + '/health', {
-      method: 'GET',
-      signal: ctrl.signal
-    });
-
-    if (!healthResp.ok) throw new Error('Worker unreachable');
-
-    /* Worker可达，测试DeepSeek代理 */
-    var ctrl2 = new AbortController();
-    setTimeout(function() { ctrl2.abort(); }, 15000);
-
+    /* 直接通过CORS代理发测试请求 */
     var resp = await fetch(LLM_CONFIG.endpoint, {
       method: 'POST',
       headers: {
@@ -232,7 +221,7 @@ async function checkLLMConnection() {
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 10
       }),
-      signal: ctrl2.signal
+      signal: ctrl.signal
     });
 
     if (resp.ok) {
@@ -317,9 +306,7 @@ async function buildSystemPrompt() {
     '\n5. 涉及船期时优先引用最新日期(' + latestDate + ')的数据';
 }
 
-/* ═══ 调用大模型API（直接 + CORS代理兜底） ═══ */
-var CORS_PROXY = 'https://cors-anywhere-dlwh.onrender.com/';
-
+/* ═══ 调用大模型API ═══ */
 async function callLLM(userQuery) {
   if (!hasLLMKey()) return null;
 
@@ -334,26 +321,11 @@ async function callLLM(userQuery) {
     max_tokens: 1500
   });
 
-  /* 尝试直连DeepSeek */
-  var result = await tryLLMFetch(LLM_CONFIG.endpoint, body, 10000);
-  if (result) {
-    LLM_STATUS = 'connected';
-    updateLLMStatusUI();
-    return result;
-  }
-
-  /* CORS拦截 — 浏览器阻止了跨域请求 */
-  LLM_STATUS = 'cors_blocked';
-  updateLLMStatusUI();
-  return null;
-}
-
-async function tryLLMFetch(url, body, timeout) {
   try {
     var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, timeout);
+    setTimeout(function() { ctrl.abort(); }, 25000);
 
-    var resp = await fetch(url, {
+    var resp = await fetch(LLM_CONFIG.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -374,8 +346,13 @@ async function tryLLMFetch(url, body, timeout) {
       : '';
 
     if (!reply) throw new Error('empty');
+    LLM_STATUS = 'connected';
+    updateLLMStatusUI();
     return { text: reply + '\n\n<span style="font-size:9px;color:#94A3B8">🧠 ' + LLM_CONFIG.provider + ' · ' + new Date().toTimeString().slice(0,5) + '</span>' };
   } catch(e) {
+    LLM_STATUS = 'failed';
+    updateLLMStatusUI();
+    console.log('LLM调用失败: ' + e.message);
     return null;
   }
 }
