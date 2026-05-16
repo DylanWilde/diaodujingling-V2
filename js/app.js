@@ -335,6 +335,7 @@ async function refreshDates() {
   var dates = await listDates();
   ['dl', 'dDate', 'dDate3'].forEach(function(id) {
     var sel = document.getElementById(id);
+    if (!sel) return;
     sel.innerHTML = '<option value="">— 选择 —</option>';
     dates.forEach(function(d) {
       var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
@@ -343,18 +344,97 @@ async function refreshDates() {
   if (dates.length) {
     var latest = dates[0];
     if (!ships.length || curDate !== latest) {
-      document.getElementById('dDate').value = latest;
-      document.getElementById('dDate3').value = latest;
-      document.getElementById('sd').value = latest;
+      var dDateEl = document.getElementById('dDate');
+      if (dDateEl) dDateEl.value = latest;
+      var dDate3El = document.getElementById('dDate3');
+      if (dDate3El) dDate3El.value = latest;
+      var sdEl = document.getElementById('sd');
+      if (sdEl) sdEl.value = latest;
       curDate = latest;
       ships = await loadDateData(latest);
     }
   }
+  updateAIStats();
 }
 
 function gd() {
   var v = document.getElementById('dl').value;
   if (v) { document.getElementById('sd').value = v; ld(); }
+}
+
+/* ═══ 手动增删船期 ═══ */
+async function manualAddShip() {
+  var user = getCurrentUser();
+  if (!user || user.role !== 'admin') { alert('🔒 仅管理员可操作'); return; }
+
+  var date = document.getElementById('mDate').value;
+  var name = document.getElementById('mName').value.trim();
+  if (!date || !name) { alert('日期和船名为必填'); return; }
+
+  var newShip = {
+    date: date,
+    name: name,
+    en: document.getElementById('mEn').value.trim(),
+    iv: document.getElementById('mIv').value.trim(),
+    ev: document.getElementById('mEv').value.trim(),
+    tm: document.getElementById('mTm').value.trim(),
+    arRaw: document.getElementById('mAr').value.trim(),
+    arV: xd(document.getElementById('mAr').value),
+    drRaw: document.getElementById('mDr').value.trim(),
+    drV: xd(document.getElementById('mDr').value),
+    pp: document.getElementById('mPp').value.trim() || '—',
+    np: document.getElementById('mNp').value.trim() || '—',
+    rm: document.getElementById('mRm').value.trim() || '—',
+    eta: document.getElementById('mEta').value.trim(),
+    _m: 1,  /* 标记为手动录入 */
+    maritime7: false,
+    maritime7Note: '',
+    maritime7By: ''
+  };
+
+  /* 加载该日期已有数据，去重（同船名+航次覆盖） */
+  var existing = await loadDateData(date);
+  var key = name + '|' + newShip.iv + '|' + newShip.ev;
+  var found = false;
+  for (var i = 0; i < existing.length; i++) {
+    var ek = existing[i].name + '|' + (existing[i].iv||'') + '|' + (existing[i].ev||'');
+    if (ek === key) { existing[i] = newShip; found = true; break; }
+  }
+  if (!found) existing.push(newShip);
+
+  var ok = await saveDateData(existing, date);
+  var el = document.getElementById('mSt');
+  if (ok) {
+    el.textContent = '✅ ' + (found ? '已覆盖' : '已添加') + ' · ' + name + ' · ' + date;
+    el.className = 'st st-ok';
+    if (curDate === date) { ships = existing; rd(); }
+    await refreshDates();
+  } else {
+    el.textContent = '❌ 保存失败';
+    el.className = 'st st-err';
+  }
+}
+
+async function deleteShip(date, name, iv, ev) {
+  var user = getCurrentUser();
+  if (!user || user.role !== 'admin') { alert('🔒 仅管理员可操作'); return; }
+  if (!confirm('⚠️ 确定删除 ' + date + ' 「' + name + '」？此操作不可恢复。')) return;
+
+  var all = await loadDateData(date);
+  var filtered = [];
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].name === name && (all[i].iv||'') === iv && (all[i].ev||'') === ev) continue;
+    filtered.push(all[i]);
+  }
+  if (filtered.length === all.length) { alert('未找到该记录'); return; }
+
+  var ok = await saveDateData(filtered, date);
+  if (ok) {
+    alert('✅ 已删除');
+    if (curDate === date) { ships = filtered; rd(); }
+    await refreshDates();
+    qr(); /* 刷新查询结果 */
+  }
 }
 
 /* ═══ 搜索 ═══ */
@@ -422,21 +502,28 @@ async function qr() {
   if (!allData.length) { el.innerHTML = '数据库无数据'; el.className = 'st st-err'; return; }
   var results = findAllShips(kw, allData);
   if (!results.length) { el.innerHTML = '❌ 未找到: ' + esc(kw); el.className = 'st st-err'; return; }
+  var user = getCurrentUser();
+  var isAdmin = user && user.role === 'admin';
   var html = '<div style="background:#F1F5F9;border-radius:10px;padding:14px"><div style="font-weight:700;margin-bottom:8px">🔍 找到 ' + results.length + ' 条匹配</div>'
-    + '<div class="tw"><table><tr><th>日期</th><th>船名</th><th>英文名</th><th>航次</th><th>码头</th><th>抵港吃水</th><th>开航吃水</th><th>上港</th><th>下港</th><th>ETA</th><th>备注</th></tr>';
+    + '<div class="tw"><table><tr><th>日期</th><th>船名</th><th>英文名</th><th>航次</th><th>码头</th><th>抵港吃水</th><th>开航吃水</th><th>上港</th><th>下港</th><th>ETA</th><th>备注</th>'
+    + (isAdmin ? '<th>操作</th>' : '') + '</tr>';
   for (var ri = 0; ri < results.length; ri++) {
     var r = results[ri];
     var a = r.arV != null ? r.arV : (r.arRaw || '—');
     var d = r.drV != null ? r.drV : (r.drRaw || '—');
     var m = r._m ? ' <span class="tg tg-warn">✏️手动</span>' : '';
     var ivEv = esc(r.iv||'') + (r.iv && r.ev ? '/' : '') + esc(r.ev||'');
+    var delBtn = isAdmin ? '<td><button class="btn btn-sm btn-g" onclick="deleteShip(\'' + esc(r.date) + '\',\'' + esc(r.name).replace(/'/g,"\\'") + '\',\'' + esc(r.iv||'') + '\',\'' + esc(r.ev||'') + '\')" style="color:#DC2626;font-size:10px">🗑️</button></td>' : '';
     html += '<tr><td>' + esc(r.date||'') + '</td><td style="font-weight:700">' + esc(r.name) + m + '</td><td>' + esc(r.en||'') + '</td>'
       + '<td>' + ivEv + '</td><td>' + esc(r.tm||'') + '</td><td>' + a + '</td><td>' + d + '</td>'
-      + '<td>' + esc(r.pp||'') + '</td><td>' + esc(r.np||'') + '</td><td>' + esc(r.eta||'') + '</td><td>' + esc(r.rm||'') + '</td></tr>';
+      + '<td>' + esc(r.pp||'') + '</td><td>' + esc(r.np||'') + '</td><td>' + esc(r.eta||'') + '</td><td>' + esc(r.rm||'') + '</td>' + delBtn + '</tr>';
   }
   html += '</table></div></div>';
   el.innerHTML = html;
   el.className = '';
+  /* 也更新sm区域方便管理 */
+  var smEl = document.getElementById('sm');
+  if (smEl) smEl.innerHTML = results.length ? '<span style="font-size:10px;color:#64748B">💡 管理员可点击🗑️删除记录</span>' : '';
 }
 
 /* ═══ 权限检查 ═══ */
@@ -744,37 +831,59 @@ function cc() {
 function cx() { document.getElementById('ci').value=''; document.getElementById('co').value=''; document.getElementById('cs').innerHTML=''; }
 
 /* ═══ Tab切换 ═══ */
+/* 权限: 游客0-4 / 调度员0-5 / 管理员0-6 */
 function sw(i) {
-  /* 未登录用户只能访问 Tab 0-3 (看板/申报/海图/黑板) */
-  var isLoggedIn = !!getCurrentUser();
-  if (!isLoggedIn && i >= 4) { alert('👀 请先登录管理员或调度员账号'); return; }
+  var user = getCurrentUser();
+  var isLoggedIn = !!user;
+  var isAdmin = user && user.role === 'admin';
+  var isDispatcher = user && user.role === 'dispatcher';
+
+  /* 权限: 游客0-1 / 调度员0-5 / 管理员0-6 */
+  if (!isLoggedIn && i >= 2) { alert('👀 游客仅可查看AI助手和港口实况，请登录后访问更多功能'); return; }
+  if (isDispatcher && i >= 6) { alert('🔒 数据管理仅管理员可访问'); return; }
 
   var btns = document.querySelectorAll('.tb-btn');
   var tabs = document.querySelectorAll('.tc');
   for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('on', j === i);
   for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('on', j === i);
 
-  if (i === 0) { rd(); startDashRefresh(); }
-  else { if (dashRefreshTimer) { clearInterval(dashRefreshTimer); dashRefreshTimer = null; } }
+  /* 清理旧定时器 */
+  if (i !== 2) { if (dashRefreshTimer) { clearInterval(dashRefreshTimer); dashRefreshTimer = null; } }
 
-  /* 离开黑板Tab时停止轮询 */
-  if (i !== 3 && typeof stopBBPoll === 'function') stopBBPoll();
+  /* 离开黑板时停止轮询 */
+  if (i !== 5 && typeof stopBBPoll === 'function') stopBBPoll();
 
-  if (i === 1) rd3();
-  if (i === 2) {} /* 海图已是静态HTML */
-  if (i === 3) initBlackboard();
+  /* Tab 0: AI助手 */
+  if (i === 0) updateAIStats();
 
-  /* 调度员进管理Tab时锁定当日 */
-  if (i === 5) {
-    var user = getCurrentUser();
-    if (user && user.role === 'dispatcher') {
-      var today = new Date().toISOString().split('T')[0];
-      document.getElementById('sd').value = today;
-      document.getElementById('sd').disabled = true;
-    } else {
-      document.getElementById('sd').disabled = false;
-    }
+  /* Tab 2: 船舶动态 */
+  if (i === 2) { rd(); startDashRefresh(); }
+
+  /* Tab 3: 海事申报 */
+  if (i === 3) rd3();
+
+  /* Tab 5: 调度黑板 */
+  if (i === 5) initBlackboard();
+
+  /* Tab 6: 数据管理 — 仅管理员 */
+  if (i === 6) {
+    document.getElementById('sd').disabled = false;
     ld();
+  }
+}
+
+/* ═══ 更新AI助手统计标签 ═══ */
+async function updateAIStats() {
+  var el = document.getElementById('aiDbStats');
+  if (!el) return;
+  try {
+    var allData = await getAllData();
+    var dates = {};
+    allData.forEach(function(s) { if (s.date) dates[s.date] = true; });
+    var dc = Object.keys(dates).length;
+    el.textContent = '📅 ' + dc + '天 | 🚢 ' + allData.length + '条';
+  } catch(e) {
+    el.textContent = '📅 加载中...';
   }
 }
 
@@ -1033,7 +1142,80 @@ async function saveDecl() {
 
   closeDeclModal();
   rd3();
-  document.getElementById('dbStatus').textContent = '💾 申报状态已保存';
+
+  /* 自动发布到线上，合并远程数据避免覆盖 */
+  var stEl = document.getElementById('dbStatus');
+  stEl.textContent = '💾 已保存 · 🔄 同步发布中...';
+  try {
+    await publishDeclChange(name, iv, ev, {
+      maritime7: maritime7,
+      maritime7Note: maritime7Note,
+      maritime7By: confirmedBy
+    }, curDate);
+    stEl.textContent = '✅ 申报已同步到线上 · ' + new Date().toTimeString().slice(0,5);
+  } catch(e) {
+    stEl.innerHTML = '<span style="color:#D97706">⚠️ 本地已保存，同步失败：' + escHtml(e.message) + '（请管理员手动点"发布到线上"）</span>';
+  }
+}
+
+/* ═══ 增量发布申报变更（合并远程数据，不覆盖历史） ═══ */
+async function publishDeclChange(name, iv, ev, declData, date) {
+  var tokenEnc = localStorage.getItem('gh_token_enc');
+  if (!tokenEnc) throw new Error('未配置发布Token');
+
+  /* 1. 拉取远程现有数据 */
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, 8000);
+  var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now(), { signal: controller.signal });
+  clearTimeout(timeout);
+  if (!resp.ok) throw new Error('拉取远程数据失败');
+
+  var remote = await resp.json();
+  var remoteShips = Array.isArray(remote) ? remote : (remote.ships || []);
+
+  /* 2. 合并：更新匹配的船舶申报状态 */
+  var found = false;
+  for (var i = 0; i < remoteShips.length; i++) {
+    var s = remoteShips[i];
+    if (s.name === name && (s.iv||'') === iv && (s.ev||'') === ev && s.date === date) {
+      s.maritime7 = declData.maritime7 ? 1 : 0;
+      s.maritime7Note = declData.maritime7Note || '';
+      s.maritime7By = declData.maritime7By || '';
+      found = true;
+      break;
+    }
+  }
+  if (!found) throw new Error('远程数据中未找到该船舶');
+
+  /* 3. 推送到GitHub */
+  var payload = { ships: remoteShips, blackboard: remote.blackboard || [], updated: Date.now() };
+  var token = atob(tokenEnc);
+
+  /* 获取远程文件SHA */
+  var sha = null;
+  try {
+    var r1 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+      headers: { 'Authorization': 'token ' + token }
+    });
+    if (r1.ok) { var info = await r1.json(); sha = info.sha; }
+  } catch(e) {}
+
+  var body = {
+    message: '📋 海事申报更新 ' + name + ' ' + new Date().toISOString().slice(0,16).replace('T',' '),
+    content: base64Encode(JSON.stringify(payload, null, 2)),
+    branch: APP_CONFIG.githubBranch
+  };
+  if (sha) body.sha = sha;
+
+  var r2 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+    method: 'PUT',
+    headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r2.ok) {
+    var errResult = await r2.json();
+    throw new Error(errResult.message || 'GitHub API失败');
+  }
 }
 
 function closeDeclModal() {
@@ -1045,7 +1227,6 @@ async function onDashDate3() {
   if (!d) return;
   curDate = d;
   document.getElementById('sd').value = d;
-  document.getElementById('dDate').value = d;
   if (isViewerMode) {
     ships = sharedShips.filter(function(s) { return s.date === d; });
     ships.forEach(function(s) {
@@ -1196,6 +1377,7 @@ function fillSharedDateSelect(payload, selId) {
   data.forEach(function(s) { if (s.date) dates[s.date] = true; });
   var list = Object.keys(dates).sort().reverse();
   var sel = document.getElementById(selId);
+  if (!sel) return '';
   sel.innerHTML = '<option value="">— 选择 —</option>';
   list.forEach(function(d) {
     var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
@@ -1209,8 +1391,11 @@ function enterViewerMode(payload) {
   sharedShips = payload.ships || [];
   sharedBB = payload.blackboard || [];
 
-  document.getElementById('tbAdmin2').style.display = 'none';
-  document.getElementById('tbAdmin3').style.display = 'none';
+  /* 游客仅可见Tab0-1，隐藏Tab2-6 */
+  for (var t = 2; t <= 6; t++) {
+    var btn = document.querySelectorAll('.tb-btn')[t];
+    if (btn) btn.style.display = 'none';
+  }
 
   var latest = fillSharedDateSelect(payload, 'dDate');
   fillSharedDateSelect(payload, 'dDate3');
@@ -1428,7 +1613,8 @@ async function seedAccounts() {
     { username: '赵逢时', password: simpleHash('888'), role: 'dispatcher' },
     { username: '丁思樑', password: simpleHash('888'), role: 'dispatcher' },
     { username: '肖明', password: simpleHash('888'), role: 'dispatcher' },
-    { username: '沈正阳', password: simpleHash('888'), role: 'dispatcher' }
+    { username: '沈正阳', password: simpleHash('888'), role: 'dispatcher' },
+    { username: '聂铭辰', password: simpleHash('888'), role: 'dispatcher' }
   ];
   var tx = d.transaction('accounts', 'readwrite');
   var st = tx.objectStore('accounts');
@@ -1510,8 +1696,10 @@ async function seedAccounts() {
   if (dates.length) {
     curDate = dates[0];
     document.getElementById('sd').value = curDate;
-    document.getElementById('dDate').value = curDate;
-    document.getElementById('dDate3').value = curDate;
+    var dDateEl2 = document.getElementById('dDate');
+    if (dDateEl2) dDateEl2.value = curDate;
+    var dDate3El2 = document.getElementById('dDate3');
+    if (dDate3El2) dDate3El2.value = curDate;
     ships = await loadDateData(curDate);
     if (!ships.length && sharedShips.length) {
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
@@ -1522,16 +1710,16 @@ async function seedAccounts() {
     document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot"></span>💾 已加载 ' + ships.length + ' 条数据';
     ['dl','dDate','dDate3'].forEach(function(id) {
       var sel = document.getElementById(id);
+      if (!sel) return;
       sel.innerHTML = '<option value="">— 选择 —</option>';
       dates.forEach(function(d) {
         var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
       });
       if (id === 'dl') sel.value = curDate;
     });
-    rd();
-    startDashRefresh();
+    rd(); startDashRefresh();
+    updateAIStats();
   } else if (sharedShips.length) {
-    /* 只有共享数据 */
     var sdates = {};
     sharedShips.forEach(function(s) { if (s.date) sdates[s.date] = true; });
     var sdatesList = Object.keys(sdates).sort().reverse();
@@ -1542,20 +1730,27 @@ async function seedAccounts() {
       sdatesList.forEach(function(d) {
         ['dl','dDate','dDate3'].forEach(function(id) {
           var sel = document.getElementById(id);
+          if (!sel) return;
           var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
         });
       });
       document.getElementById('sd').value = curDate;
-      document.getElementById('dDate').value = curDate;
-      document.getElementById('dDate3').value = curDate;
+      var dDateEl3 = document.getElementById('dDate');
+      if (dDateEl3) dDateEl3.value = curDate;
+      var dDate3El3 = document.getElementById('dDate3');
+      if (dDate3El3) dDate3El3.value = curDate;
       document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 在线数据 ' + ships.length + ' 条';
       document.getElementById('upSt').className = 'st st-info';
       document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>👀 在线数据 · 共 ' + sharedShips.length + ' 条';
-      rd();
-      startDashRefresh();
+      rd(); startDashRefresh();
+      updateAIStats();
     }
   } else {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
     document.getElementById('dbStatus').textContent = '💾 数据库就绪，等待上传';
   }
+
+  /* 初始化AI助手 */
+  if (typeof initAIAssistant === 'function') { initAIAssistant(); }
+  updateAIStats();
 })();

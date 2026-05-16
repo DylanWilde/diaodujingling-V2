@@ -75,8 +75,10 @@ function logoutAccount() {
   document.getElementById('userArea').style.display = 'none';
   document.getElementById('loginArea').style.display = '';
   document.getElementById('adminArea').style.display = 'none';
-  document.getElementById('tbAdmin2').style.display = 'none';
-  document.getElementById('tbAdmin3').style.display = 'none';
+  for (var t = 2; t <= 6; t++) {
+    var btn = document.querySelectorAll('.tb-btn')[t];
+    if (btn) btn.style.display = 'none';
+  }
   localStorage.removeItem('gh_token_enc');
   localStorage.removeItem('dispatch_user');
   alert('已退出登录');
@@ -104,11 +106,16 @@ function updateUserUI() {
     + '<button class="btn btn-sm btn-s" onclick="openAccountModal()" style="font-size:10px">👥 账号</button>'
     + '<button class="btn btn-sm btn-g" onclick="logoutAccount()" style="font-size:10px">🚪 退出</button>';
 
-  /* 管理员显示发布/管理按钮 */
+  /* Tab按钮权限: 调度员Tab2-5 / 管理员Tab2-6 */
+  var tb1 = document.getElementById('tbAdmin1');
+  var tb2 = document.getElementById('tbAdmin2');
+  var tb3 = document.getElementById('tbAdmin3');
+  if (tb1) tb1.style.display = '';  /* 引航转换 */
+  if (tb2) tb2.style.display = '';  /* 调度黑板 */
+  if (tb3) tb3.style.display = currentUser.role === 'admin' ? '' : 'none';  /* 数据管理: 仅管理员 */
+
   if (currentUser.role === 'admin') {
     document.getElementById('adminArea').style.display = 'inline';
-    document.getElementById('tbAdmin2').style.display = '';
-    document.getElementById('tbAdmin3').style.display = '';
   }
 }
 
