@@ -177,7 +177,7 @@ function aiGetDates(allData) {
 
 /* ═══ 大模型配置（默认DeepSeek免费API） ═══ */
 var LLM_CONFIG = {
-  apiKey: localStorage.getItem('llm_key') || 'sk-012f84***637e8',
+  apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
   endpoint: 'https://api.deepseek.com/v1/chat/completions',
   provider: 'DeepSeek'
