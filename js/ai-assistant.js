@@ -180,8 +180,9 @@ var LLM_CONFIG = {
   apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
   provider: 'DeepSeek',
-  /* 多个代理依次尝试（国内优先） */
+  /* 多个代理依次尝试（Vercel优先，最可靠） */
   proxies: [
+    { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy' },
     { name: '直连', url: 'https://api.deepseek.com/v1/chat/completions' },
     { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') },
     { name: 'allorigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') }
