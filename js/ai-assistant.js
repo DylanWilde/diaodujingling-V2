@@ -180,14 +180,14 @@ var LLM_CONFIG = {
   apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
   model: 'deepseek-chat',
   provider: 'DeepSeek',
-  /* 同域代理优先：如果是Vercel部署则/api/proxy同域无CORS */
+  /* 多个端点依次尝试，第一个通的就是当前使用 */
   proxies: [
     { name: '同域', url: '/api/proxy' },
     { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy' },
     { name: '直连', url: 'https://api.deepseek.com/v1/chat/completions' },
     { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') }
   ],
-  currentProxy: 0
+  currentProxy: -1 /* -1=未检测 */
 };
 
 function setLLMKey(key) {
@@ -246,7 +246,8 @@ function updateLLMStatusUI() {
 
   switch (LLM_STATUS) {
     case 'connected':
-      tag.textContent = '🧠 DeepSeek 已连接';
+      var pn = LLM_CONFIG.proxies[LLM_CONFIG.currentProxy];
+      tag.textContent = '🧠 DeepSeek 已连接' + (pn ? ' · ' + pn.name : '');
       tag.style.background = '#ECFDF5';
       tag.style.color = '#059669';
       tag.style.fontWeight = '700';
