@@ -1308,13 +1308,13 @@ async function publishData() {
 
     var result = await r2.json();
     if (r2.ok) {
-      alert('✅ 发布成功！\n已推送 ' + allData.length + ' 条船舶数据到线上。\nGitHub Pages 约1-2分钟后生效。');
-      document.getElementById('dbStatus').textContent = '📤 已发布 ' + allData.length + ' 条到线上';
+      alert('✅ 发布成功！\n已推送 ' + allData.length + ' 条船舶数据。\n覆盖 ' + Object.keys(allData.reduce(function(acc,s){acc[s.date]=true;return acc;},{})).length + ' 个日期。\n1-2分钟后全球生效。');
+      document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + allData.length + ' 条 · 所有人可见';
     } else {
-      alert('❌ 发布失败：' + (result.message || '未知错误'));
+      alert('❌ 发布失败：' + (result.message || '未知错误') + '\n\n请确认：\n1. GitHub Token 有效\n2. 网络可访问 GitHub\n3. Token 有仓库写权限');
     }
   } catch(e) {
-    alert('❌ 网络错误：' + e.message);
+    alert('❌ 网络错误：' + e.message + '\n\n可能原因：\n1. 公司网络拦截了GitHub\n2. Token已过期\n3. 请换网络重试');
   }
 
   btn.textContent = '📤 发布到线上'; btn.disabled = false;
@@ -1357,17 +1357,32 @@ async function publishDataSilent() {
 }
 
 async function tryLoadSharedData() {
-  try {
-    var controller = new AbortController();
-    var timeout = setTimeout(function() { controller.abort(); }, 5000);
-    var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now(), { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!resp.ok) return null;
-    var data = await resp.json();
-    /* 兼容旧格式 (纯数组) 和新格式 ({ ships, blackboard }) */
-    if (Array.isArray(data)) return { ships: data, blackboard: [] };
-    if (data && data.ships) return data;
-  } catch(e) {}
+  /* 最多重试3次，每次15秒超时 */
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      var controller = new AbortController();
+      var timeout = setTimeout(function() { controller.abort(); }, 15000);
+      var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now(), {
+        signal: controller.signal,
+        cache: 'no-store'
+      });
+      clearTimeout(timeout);
+      if (!resp.ok) {
+        console.log('共享数据加载HTTP错误: ' + resp.status);
+        continue;
+      }
+      var data = await resp.json();
+      if (Array.isArray(data)) return { ships: data, blackboard: [] };
+      if (data && data.ships) {
+        console.log('✅ 共享数据已加载: ' + data.ships.length + ' 条船舶');
+        return data;
+      }
+      console.log('共享数据格式异常，重试...');
+    } catch(e) {
+      console.log('共享数据加载失败(尝试' + (attempt+1) + '/3): ' + e.message);
+    }
+  }
+  console.log('❌ 共享数据加载失败，3次重试均未成功');
   return null;
 }
 
@@ -1720,6 +1735,8 @@ async function seedAccounts() {
     rd(); startDashRefresh();
     updateAIStats();
   } else if (sharedShips.length) {
+    /* 本地无数据，使用线上共享数据 — 进入访客模式 */
+    enterViewerMode({ ships: sharedShips, blackboard: sharedBB });
     var sdates = {};
     sharedShips.forEach(function(s) { if (s.date) sdates[s.date] = true; });
     var sdatesList = Object.keys(sdates).sort().reverse();
@@ -1748,6 +1765,11 @@ async function seedAccounts() {
   } else {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
     document.getElementById('dbStatus').textContent = '💾 数据库就绪，等待上传';
+    /* 无本地也无共享数据，游客仅看Tab0-1 */
+    for (var t2 = 2; t2 <= 6; t2++) {
+      var btn2 = document.querySelectorAll('.tb-btn')[t2];
+      if (btn2) btn2.style.display = 'none';
+    }
   }
 
   /* 初始化AI助手 */
