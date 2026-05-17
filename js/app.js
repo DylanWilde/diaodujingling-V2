@@ -1227,6 +1227,9 @@ async function onDashDate3() {
   if (!d) return;
   curDate = d;
   document.getElementById('sd').value = d;
+  /* 同步船舶动态日期 */
+  var dDateEl = document.getElementById('dDate');
+  if (dDateEl) dDateEl.value = d;
   if (isViewerMode) {
     ships = sharedShips.filter(function(s) { return s.date === d; });
     ships.forEach(function(s) {
@@ -1709,7 +1712,9 @@ async function seedAccounts() {
 
   var dates = await listDates();
   if (dates.length) {
-    curDate = dates[0];
+    /* 优先选今天，今天没数据则选最新日期 */
+    var today = new Date().toISOString().split('T')[0];
+    curDate = (dates.indexOf(today) >= 0) ? today : dates[0];
     document.getElementById('sd').value = curDate;
     var dDateEl2 = document.getElementById('dDate');
     if (dDateEl2) dDateEl2.value = curDate;
@@ -1730,9 +1735,9 @@ async function seedAccounts() {
       dates.forEach(function(d) {
         var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
       });
-      if (id === 'dl') sel.value = curDate;
+      sel.value = curDate;
     });
-    rd(); startDashRefresh();
+    rd(); rd3(); startDashRefresh();
     updateAIStats();
   } else if (sharedShips.length) {
     /* 本地无数据，使用线上共享数据 — 进入访客模式 */
@@ -1741,25 +1746,25 @@ async function seedAccounts() {
     sharedShips.forEach(function(s) { if (s.date) sdates[s.date] = true; });
     var sdatesList = Object.keys(sdates).sort().reverse();
     if (sdatesList.length) {
-      curDate = sdatesList[0];
+      /* 优先今天，否则最新 */
+      var today2 = new Date().toISOString().split('T')[0];
+      curDate = (sdatesList.indexOf(today2) >= 0) ? today2 : sdatesList[0];
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
       ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
-      sdatesList.forEach(function(d) {
-        ['dl','dDate','dDate3'].forEach(function(id) {
-          var sel = document.getElementById(id);
-          if (!sel) return;
+      ['dl','dDate','dDate3'].forEach(function(id) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— 选择 —</option>';
+        sdatesList.forEach(function(d) {
           var o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o);
         });
+        sel.value = curDate;
       });
       document.getElementById('sd').value = curDate;
-      var dDateEl3 = document.getElementById('dDate');
-      if (dDateEl3) dDateEl3.value = curDate;
-      var dDate3El3 = document.getElementById('dDate3');
-      if (dDate3El3) dDate3El3.value = curDate;
       document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 在线数据 ' + ships.length + ' 条';
       document.getElementById('upSt').className = 'st st-info';
       document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>👀 在线数据 · 共 ' + sharedShips.length + ' 条';
-      rd(); startDashRefresh();
+      rd(); rd3(); startDashRefresh();
       updateAIStats();
     }
   } else {
