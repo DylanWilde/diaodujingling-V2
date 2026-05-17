@@ -182,10 +182,10 @@ var LLM_CONFIG = {
   provider: 'DeepSeek',
   /* 多个端点依次尝试，第一个通的就是当前使用 */
   proxies: [
+    { name: '阿里云', url: 'https://proxy-maaftmtdnq.cn-hangzhou.fcapp.run' },
     { name: '同域', url: '/api/proxy' },
     { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy' },
-    { name: '直连', url: 'https://api.deepseek.cn/v1/chat/completions' },
-    { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.cn/v1/chat/completions') }
+    { name: '直连', url: 'https://api.deepseek.cn/v1/chat/completions' }
   ],
   currentProxy: -1 /* -1=未检测 */
 };
