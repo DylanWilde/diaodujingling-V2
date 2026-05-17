@@ -184,8 +184,8 @@ var LLM_CONFIG = {
   proxies: [
     { name: '同域', url: '/api/proxy' },
     { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy' },
-    { name: '直连', url: 'https://api.deepseek.com/v1/chat/completions' },
-    { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.com/v1/chat/completions') }
+    { name: '直连', url: 'https://api.deepseek.cn/v1/chat/completions' },
+    { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.cn/v1/chat/completions') }
   ],
   currentProxy: -1 /* -1=未检测 */
 };
