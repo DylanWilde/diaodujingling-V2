@@ -1656,6 +1656,8 @@ async function seedAccounts() {
   if (!d) return;
   var presetUsers = [
     { username: '姜磊', password: simpleHash('888'), role: 'admin' },
+    { username: '王剑峰', password: simpleHash('888'), role: 'admin' },
+    { username: '杨华', password: simpleHash('888'), role: 'admin' },
     { username: '冯磊', password: simpleHash('888'), role: 'dispatcher' },
     { username: '赵逢时', password: simpleHash('888'), role: 'dispatcher' },
     { username: '丁思樑', password: simpleHash('888'), role: 'dispatcher' },
