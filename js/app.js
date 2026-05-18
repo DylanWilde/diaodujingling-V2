@@ -1175,7 +1175,8 @@ async function saveDecl() {
 /* ═══ 增量发布申报变更（合并远程数据，不覆盖历史） ═══ */
 async function publishDeclChange(name, iv, ev, declData, date) {
   var tokenEnc = localStorage.getItem('gh_token_enc');
-  if (!tokenEnc) throw new Error('未配置发布Token');
+  if (!tokenEnc) throw new Error('未配置GitHub Token');
+  var token = atob(tokenEnc);
 
   /* 1. 拉取远程现有数据 */
   var controller = new AbortController();
@@ -1274,7 +1275,7 @@ async function publishData() {
   if (!getCurrentUser() || getCurrentUser().role !== 'admin') { alert('🔒 仅管理员可发布'); return; }
   var tokenEnc = localStorage.getItem('gh_token_enc');
   if (!tokenEnc) {
-    var token = prompt('请输入 GitHub Personal Access Token：');
+    var token = prompt('请输入 GitHub Personal Access Token（仅存本机，不会上传）：');
     if (!token) return;
     localStorage.setItem('gh_token_enc', btoa(token));
     tokenEnc = btoa(token);
@@ -1290,16 +1291,33 @@ async function publishData() {
   try {
     var bbData = await getAllBBMessages();
     var payload = { ships: allData, blackboard: bbData, updated: Date.now() };
-    var content = base64Encode(JSON.stringify(payload, null, 2));
+    var jsonStr = JSON.stringify(payload);
+    /* btoa安全编码UTF-8 */
+    var content = btoa(unescape(encodeURIComponent(jsonStr)));
     var sha = null;
 
+    /* 1. 获取远程文件SHA（如果存在） */
+    var apiUrl = 'https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath;
     try {
-      var r1 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+      var r1 = await fetch(apiUrl, {
         headers: { 'Authorization': 'token ' + token }
       });
       if (r1.ok) { var info = await r1.json(); sha = info.sha; }
-    } catch(e) {}
+      else if (r1.status === 404) {
+        /* 文件不存在，将创建新文件 */
+        console.log('远程文件不存在，将创建');
+      } else if (r1.status === 401) {
+        throw new Error('Token无效或已过期（401 Unauthorized）');
+      } else if (r1.status === 403) {
+        throw new Error('Token无权限访问此仓库（403 Forbidden），请确认Token有repo权限');
+      } else {
+        console.log('获取SHA返回: ' + r1.status);
+      }
+    } catch(e) {
+      if (e.message.indexOf('Token') >= 0) throw e;
+    }
 
+    /* 2. 推送数据 */
     var body = {
       message: '🚢 调度精灵数据更新 ' + new Date().toISOString().slice(0, 10),
       content: content,
@@ -1307,7 +1325,7 @@ async function publishData() {
     };
     if (sha) body.sha = sha;
 
-    var r2 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+    var r2 = await fetch(apiUrl, {
       method: 'PUT',
       headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -1315,13 +1333,20 @@ async function publishData() {
 
     var result = await r2.json();
     if (r2.ok) {
-      alert('✅ 发布成功！\n已推送 ' + allData.length + ' 条船舶数据。\n覆盖 ' + Object.keys(allData.reduce(function(acc,s){acc[s.date]=true;return acc;},{})).length + ' 个日期。\n1-2分钟后全球生效。');
+      var dateCount = Object.keys(allData.reduce(function(acc,s){acc[s.date]=true;return acc;},{})).length;
+      alert('✅ 发布成功！\n' + allData.length + ' 条船舶 | ' + dateCount + ' 个日期\n1-2分钟后全球生效');
       document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + allData.length + ' 条 · 所有人可见';
+      /* 发布成功后刷新共享数据 */
+      sharedShips = allData;
     } else {
-      alert('❌ 发布失败：' + (result.message || '未知错误') + '\n\n请确认：\n1. GitHub Token 有效\n2. 网络可访问 GitHub\n3. Token 有仓库写权限');
+      var errMsg = result.message || '未知错误';
+      if (r2.status === 422) errMsg = '文件过大或格式错误：' + errMsg;
+      if (r2.status === 401) errMsg = 'Token无效，请重新输入';
+      if (r2.status === 403) errMsg = 'Token无写入权限，请确认Token勾选了repo权限';
+      alert('❌ 发布失败 [' + r2.status + ']：' + errMsg);
     }
   } catch(e) {
-    alert('❌ 网络错误：' + e.message + '\n\n可能原因：\n1. 公司网络拦截了GitHub\n2. Token已过期\n3. 请换网络重试');
+    alert('❌ ' + e.message);
   }
 
   btn.textContent = '📤 发布到线上'; btn.disabled = false;
@@ -1329,7 +1354,7 @@ async function publishData() {
 
 async function publishDataSilent() {
   var tokenEnc = localStorage.getItem('gh_token_enc');
-  if (!tokenEnc) throw new Error('no token');
+  if (!tokenEnc) throw new Error('未配置Token，请手动点"发布到线上"输入');
   var token = atob(tokenEnc);
 
   var allData = await getAllData();
