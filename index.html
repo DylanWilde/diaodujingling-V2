@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调度精灵/DispatchHub V6 · 航运智能助手</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/effects.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="container">
+
+<div class="hd">
+  <div><h1>⚓ 调度精灵 <span class="v">V6</span><span class="sub">/ DispatchHub</span></h1></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span class="st" id="dbStatus">💾 初始化...</span>
+    <span class="by">Tato.Lee</span>
+    <span id="userArea" style="display:none;align-items:center;gap:6px"></span>
+    <span id="adminArea" style="display:none"><button class="btn btn-sm btn-p" onclick="publishData()">📤 发布到线上</button></span>
+    <span id="loginArea"><button class="btn btn-p" onclick="adminLogin()" id="loginBtn">🔑 管理员登录</button></span>
+  </div>
+</div>
+
+<div class="tb">
+  <button class="tb-btn on" onclick="sw(0)">🧠 调度精灵AI</button>
+  <button class="tb-btn" onclick="sw(1)">🌊 港口实况</button>
+  <button class="tb-btn" onclick="sw(2)">🚢 船舶动态</button>
+  <button class="tb-btn" onclick="sw(3)">📋 海事申报</button>
+  <button class="tb-btn" onclick="sw(4)" id="tbAdmin1">📡 引航转换</button>
+  <button class="tb-btn" onclick="sw(5)" id="tbAdmin2">📝 调度黑板</button>
+  <button class="tb-btn" onclick="sw(6)" id="tbAdmin3">⚙️ 数据管理</button>
+</div>
+
+<!-- ════ TAB 0: 调度精灵AI ════ -->
+<div id="t0" class="tc on">
+  <div class="ai-layout">
+    <div class="ai-chat-panel">
+      <div class="ai-chat-header">
+        <div class="ai-status-dot"></div>
+        <span>调度精灵 AI · 船舶数据库已连接</span>
+        <span class="ai-stat-tag" id="aiDbStats">📅 加载中...</span>
+      </div>
+      <div class="ai-chat-body" id="aiChatMessages"></div>
+      <div class="ai-chat-foot">
+        <div class="ai-quick-chips" id="aiQuickChips"></div>
+        <div class="ai-input-row">
+          <textarea id="aiInput" rows="2" placeholder="问我船名、航次、日期、码头、吃水、潮汐天气... 例如：5月9日浦东码头的船"></textarea>
+          <button class="ai-send-btn" id="aiSendBtn" title="发送">↑</button>
+        </div>
+      </div>
+    </div>
+    <div class="ai-info-panel">
+      <div class="ai-info-card">
+        <div class="ai-info-title">📍 上海港 洋山港区</div>
+        <div class="ai-chart-bg">
+          <div class="ai-chart-marker ai-cm-ys" title="洋山深水港"><span>洋山</span></div>
+          <div class="ai-chart-marker ai-cm-wgq" title="外高桥"><span>外高桥</span></div>
+          <div class="ai-chart-marker ai-cm-bs" title="宝山"><span>宝山</span></div>
+          <div class="ai-chart-marker ai-cm-pd" title="浦东"><span>浦东</span></div>
+          <div class="ai-chart-anchor ai-ca1">⚓ 锚地</div>
+          <div class="ai-chart-anchor ai-ca2">⚓ 锚地</div>
+          <svg class="ai-chart-route" viewBox="0 0 300 400"><path d="M120,350 Q150,250 160,180 Q170,120 200,80" fill="none" stroke="rgba(37,99,235,0.2)" stroke-width="2" stroke-dasharray="6,4"/></svg>
+        </div>
+      </div>
+      <div class="ai-info-card">
+        <div class="ai-info-title">🌤️ 今日气象</div>
+        <div class="ai-info-row"><span>气温</span><span>16-25°C</span></div>
+        <div class="ai-info-row"><span>风力</span><span>东南 3-4级</span></div>
+        <div class="ai-info-row"><span>浪高</span><span>外0.8m/内0.3m</span></div>
+        <div class="ai-info-row"><span>能见度</span><span class="ai-val-ok">8km+ 良好</span></div>
+      </div>
+      <div class="ai-info-card">
+        <div class="ai-info-title">🌊 洋山潮汐</div>
+        <div class="ai-info-row"><span>🌊 高潮</span><span>06:42 (4.2m)</span></div>
+        <div class="ai-info-row"><span>🌊 高潮</span><span>19:15 (3.8m)</span></div>
+        <div class="ai-info-row"><span>📉 低潮</span><span>12:28 (1.1m)</span></div>
+      </div>
+      <div class="ai-info-card">
+        <div class="ai-info-title">💡 提示</div>
+        <div style="font-size:11px;color:#475569;line-height:1.6">
+          输入船名查历史航次和吃水<br>
+          输入日期查当天所有船舶<br>
+          输入航次号精确匹配<br>
+          组合查询：船名+日期+码头
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TAB 1: 港口实况 ════ -->
+<div id="t1" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2>🌊 上海港港口实况 — 码头 & 锚地分布</h2>https://developer.baidu.com/article/detail.html?id=4924217
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="portWeatherTag" class="tg tg-ok">🌤️ 气象正常</span>
+        <span id="portTideTag" class="tg tg-info">🌊 今日高潮 06:42</span>
+      </div>
+    </div>
+    <p style="color:#64748B;font-size:.8rem;margin:4px 0 10px">洋山深水港 · 外高桥 · 宝山 · 浦东 各码头及锚地位置标注 · 实时水文气象叠加</p>
+  </div>
+  <div class="port-map">
+    <div class="port-map-bg">
+      <div class="port-coast"></div>
+      <div class="port-river"></div>
+      <div class="port-marker port-marker-t1" title="洋山深水港"><span>洋山深水港</span><i>深水集装箱枢纽 · 水深17m</i></div>
+      <div class="port-marker port-marker-t2" title="洋山四期"><span>洋山四期</span><i>全自动化码头 · 水深16m</i></div>
+      <div class="port-marker port-marker-t3" title="外高桥一期"><span>外高桥一期</span><i>集装箱/滚装 · 水深12.5m</i></div>
+      <div class="port-marker port-marker-t4" title="外高桥二期"><span>外高桥二期</span><i>集装箱码头 · 水深12.5m</i></div>
+      <div class="port-marker port-marker-t5" title="外高桥三四期"><span>外高桥三四期</span><i>多用途码头 · 水深12.5m</i></div>
+      <div class="port-marker port-marker-t6" title="外高桥五期"><span>外高桥五期</span><i>集装箱码头 · 水深13m</i></div>
+      <div class="port-marker port-marker-t7" title="浦东码头"><span>浦东码头</span><i>散杂货/集装箱 · 水深10m</i></div>
+      <div class="port-marker port-marker-t8" title="宝山码头"><span>宝山码头</span><i>散货/件杂货 · 水深12m</i></div>
+      <div class="port-marker port-marker-t9" title="罗泾码头"><span>罗泾码头</span><i>煤炭/矿石 · 水深11m</i></div>
+      <div class="port-marker port-marker-t10" title="军工路码头"><span>军工路码头</span><i>件杂货/钢材 · 水深9m</i></div>
+      <div class="port-anchorage port-anch-a1" title="长江口1号锚地">⚓ 长江口1号锚地</div>
+      <div class="port-anchorage port-anch-a2" title="长江口2号锚地">⚓ 长江口2号锚地</div>
+      <div class="port-anchorage port-anch-a3" title="绿华山锚地">⚓ 绿华山锚地</div>
+      <div class="port-anchorage port-anch-a4" title="洋山港锚地">⚓ 洋山港锚地</div>
+      <div class="port-anchorage port-anch-a5" title="南槽锚地">⚓ 南槽锚地</div>
+      <div class="port-anchorage port-anch-a6" title="宝山锚地">⚓ 宝山锚地</div>
+    </div>
+    <div class="port-legend">
+      <span><i class="port-dot-t"></i> 码头/Terminal</span>
+      <span><i class="port-dot-a"></i> 锚地/Anchorage</span>
+      <span style="margin-left:12px;color:#64748B;font-size:10px">📡 数据源：港务局 + hidolphin气象</span>
+    </div>
+  </div>
+  <div class="cd" style="margin-top:12px">
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <h3 style="font-size:13px;font-weight:700;color:#2563EB;margin-bottom:8px">🌊 各港区今日潮汐</h3>
+        <div style="font-size:12px;color:#475569;line-height:1.8">
+          <div><b>洋山深水港</b>：高潮 06:42(4.2m) / 19:15(3.8m) · 低潮 12:28(1.1m)</div>
+          <div><b>外高桥</b>：高潮 06:30(3.8m) / 19:00(3.5m) · 低潮 12:10(1.0m)</div>
+          <div><b>宝山</b>：高潮 07:00(3.5m) / 19:30(3.2m) · 低潮 12:50(0.9m)</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <h3 style="font-size:13px;font-weight:700;color:#DC2626;margin-bottom:8px">⚠ 当前预警</h3>
+        <div style="font-size:12px;color:#475569;line-height:1.8">
+          <div>🟡 今日14:30低潮0.8m · 洋山4#限吃水＜12m</div>
+          <div>🟡 明日偏北风5-6级 · 浪高1.5m</div>
+          <div>🟢 其他港区作业条件正常</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TAB 2: 船舶动态 ════ -->
+<div id="t2" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2>🚢 上海港船舶动态 — 按码头分组</h2>
+      <a href="https://www.shipxy.com/" target="_blank" class="btn btn-p" style="text-decoration:none">🌐 船讯网实时跟踪</a>
+    </div>
+    <p style="color:#64748B;font-size:.8rem;margin:4px 0 14px">选中日期后自动展示 · 自动匹配代理船舶 · 点击卡片跳转船讯网</p>
+    <div class="sb">
+      <div class="sb-item sb-blue"><div class="n" id="stT">0</div><div class="l">代理船舶数</div></div>
+      <div class="sb-item sb-red"><div class="n" id="stA">0</div><div class="l">24小时预抵</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="stD">0</div><div class="l">72小时预抵</div></div>
+      <div class="sb-item sb-green"><div class="n" id="stM">0</div><div class="l">码头数</div></div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end">
+      <div class="weather-card" id="weatherPanel">
+        <div class="weather-item"><span class="w-label">🌊 长江口天气</span><span class="w-value w-normal" id="cjWeather">正常</span></div>
+        <div class="weather-item"><span class="w-label">🏗️ 外高桥拥堵</span><span class="w-value w-normal" id="wgqCongestion">正常</span></div>
+      </div>
+      <div style="display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap">
+        <button class="btn btn-sm btn-s" onclick="setWeather('normal')" title="正常">☀️ 正常</button>
+        <button class="btn btn-sm btn-s" onclick="setWeather('wind')" title="大风">💨 大风</button>
+        <button class="btn btn-sm btn-s" onclick="setWeather('fog')" title="大雾">🌫️ 大雾</button>
+        <span style="font-size:9px;color:#94A3B8;margin-left:4px" id="weatherUpdated"></span>
+      </div>
+    </div>
+    <div class="r">
+      <div class="c"><label>📅 日期</label><select id="dDate" onchange="onDashDate()"><option value="">—选择—</option></select></div>
+      <div class="c"><label>🏗️ 码头</label><select id="dDock" onchange="rd()"><option value="">全部码头</option></select></div>
+      <div class="c"><input id="dFilter" placeholder="🔍 搜船名/航次" oninput="rd()"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <span id="dRefresh" style="font-size:10px;color:#94A3B8">🔄 每10分钟自动刷新</span>
+      <span id="dCountdown" style="font-size:10px;color:#64748B"></span>
+    </div>
+  </div>
+  <div id="dg"><div class="st-big">📂 请先上传船期表</div></div>
+</div>
+
+<!-- ════ TAB 3: 海事申报 ════ -->
+<div id="t3" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2>📋 海事申报看板 — 按码头分组</h2>
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <span class="tg tg-warn" style="font-size:10px">🟠 <48h</span>
+        <span class="tg tg-err" style="font-size:10px">🔴 <24h</span>
+        <span class="tg tg-ok" style="font-size:10px">🟢 已全部完成</span>
+      </div>
+    </div>
+    <p style="color:#64748B;font-size:.8rem;margin:4px 0 14px">点击卡片确认7日海事完成情况 · ETA预警：橙色<48h 红色<24h · 已完成卡片自动沉底</p>
+    <div class="sb">
+      <div class="sb-item sb-blue"><div class="n" id="stT3">0</div><div class="l">船舶数</div></div>
+      <div class="sb-item sb-green"><div class="n" id="stMar3">0</div><div class="l">✅ 海事完成</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="stWarn3">0</div><div class="l">⚠️ 需关注</div></div>
+    </div>
+    <div class="r">
+      <div class="c"><label>📅 日期</label><select id="dDate3" onchange="onDashDate3()"><option value="">—选择—</option></select></div>
+      <div class="c"><input id="dFilter3" placeholder="🔍 搜船名/航次" oninput="rd3()"></div>
+    </div>
+  </div>
+  <div id="dg3"><div class="st-big">📂 请先上传船期表</div></div>
+</div>
+
+<!-- ════ TAB 4: 引航转换 ════ -->
+<div id="t4" class="tc">
+  <div class="cd">
+    <h2>📡 引航站格式转换器</h2>
+    <div class="r">
+      <div class="c"><label>✏️ 原始</label><textarea id="ci" style="height:280px;font-family:monospace" placeholder="粘贴引航站原始数据..."></textarea></div>
+      <div class="c"><label>📋 结果</label><textarea id="co" style="height:280px;font-family:monospace" readonly></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-p" onclick="cv()">✨ 转换</button>
+      <button class="btn btn-s" onclick="cc()">📑 复制</button>
+      <button class="btn btn-s" onclick="cx()">🧹 清空</button>
+    </div>
+    <div id="cs" class="st" style="text-align:center;margin-top:6px"></div>
+  </div>
+</div>
+
+<!-- ════ TAB 5: 调度黑板 ════ -->
+<div id="t5" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2>📝 调度当日提醒黑板</h2>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span id="bbPermHint" style="font-size:10px;color:#94A3B8"></span>
+      </div>
+    </div>
+    <div class="r">
+      <div class="c"><label>📅 日期</label><select id="bbDate" onchange="bbChangeDate()"><option value="">—选择—</option></select></div>
+      <div class="c2"><input id="bbInput" placeholder="✏️ 输入提醒内容..." onkeydown="if(event.key==='Enter')bbSend()"></div>
+      <div style="padding-top:18px"><button class="btn btn-p" onclick="bbSend()">📨 发布</button></div>
+    </div>
+  </div>
+  <div class="bb-container">
+    <div class="bb-messages" id="bbMsgs">
+      <div style="text-align:center;padding:40px;color:#94A3B8">⏳ 加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TAB 6: 数据管理 ════ -->
+<div id="t6" class="tc">
+  <div class="cd">
+    <h2>📂 上传船期表（按日期存储，同日期新上传覆盖，历史数据持久保留）</h2>
+    <div class="uz" onclick="document.getElementById('fu').click()">
+      <div style="font-size:1.8rem">📤 点击上传 .xls / .xlsx</div>
+      <div style="font-size:.75rem;color:#64748B;margin-top:4px">自动识别船名/航次/吃水/上下港/码头/英文名/ETA · 同日期覆盖旧数据 · 所有历史月份自动归档</div>
+    </div>
+    <input type="file" id="fu" accept=".xls,.xlsx,.xlsm" onchange="up()" multiple style="display:none">
+    <div id="upSt" class="st st-info" style="margin-top:10px">等待上传...</div>
+  </div>
+
+  <div class="cd">
+    <div class="r">
+      <div class="c"><label>📅 日期</label><input type="date" id="sd" onchange="ld()"></div>
+      <div class="c"><label>已有数据</label><select id="dl" onchange="gd()"><option value="">—加载—</option></select></div>
+      <div style="padding-top:18px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="exp()">📥 导出Excel</button>
+        <button class="btn btn-s" onclick="bk()">💾 备份全部</button>
+        <button class="btn btn-g" onclick="document.getElementById('ri').click()">📂 恢复备份</button>
+        <input type="file" id="ri" accept=".json" onchange="rs()" style="display:none">
+      </div>
+    </div>
+  </div>
+
+  <div class="cd">
+    <h2>✏️ 手动录入船期</h2>
+    <p style="color:#64748B;font-size:.75rem;margin-bottom:10px">手动添加船舶记录 · 相同日期+船名+航次自动去重</p>
+    <div class="r">
+      <div class="c"><label>📅 日期</label><input type="date" id="mDate"></div>
+      <div class="c"><label>🚢 船名</label><input id="mName" placeholder="中文船名"></div>
+      <div class="c"><label>英文名</label><input id="mEn" placeholder="英文名(可选)"></div>
+    </div>
+    <div class="r">
+      <div class="c"><label>进口航次</label><input id="mIv" placeholder="如 585W"></div>
+      <div class="c"><label>出口航次</label><input id="mEv" placeholder="如 585E"></div>
+      <div class="c"><label>🏗️ 码头</label><input id="mTm" placeholder="如 浦东"></div>
+    </div>
+    <div class="r">
+      <div class="c"><label>📐 抵港吃水(m)</label><input id="mAr" placeholder="如 7.0"></div>
+      <div class="c"><label>📐 离港吃水(m)</label><input id="mDr" placeholder="如 8.5"></div>
+      <div class="c"><label>⏰ ETA</label><input id="mEta" placeholder="如 5/1630"></div>
+    </div>
+    <div class="r">
+      <div class="c"><label>🗺️ 上港</label><input id="mPp" placeholder="如 宁波"></div>
+      <div class="c"><label>🗺️ 下港</label><input id="mNp" placeholder="如 仁川"></div>
+      <div class="c"><label>📝 备注</label><input id="mRm" placeholder="备注(可选)"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-p" onclick="manualAddShip()">➕ 添加/覆盖</button>
+      <span id="mSt" class="st" style="margin-left:8px"></span>
+    </div>
+  </div>
+
+  <div class="cd">
+    <h2>🔍 船舶查询 & 管理</h2>
+    <div class="r">
+      <div class="c2"><input id="si" placeholder="搜船名或航次号" onkeydown="if(event.key==='Enter')qr()"></div>
+      <div><button class="btn btn-p" onclick="qr()">🔍 查询</button></div>
+    </div>
+    <div id="sr" class="st st-info">上传后输入船名查询</div>
+    <div id="sm" style="margin-top:8px"></div>
+  </div>
+
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <h2 style="margin-bottom:0">📅 月度归档</h2>
+      <button class="btn btn-s btn-sm" onclick="renderMonthlyArchive()">🔄 刷新</button>
+    </div>
+    <p style="color:#64748B;font-size:.75rem;margin-bottom:12px">所有历史船期按月份归档，上传新数据自动合并，不再丢失</p>
+    <div class="ma-stats" id="maStats"></div>
+    <div class="ma-grid" id="maGrid">
+      <div class="st-info" style="text-align:center;padding:20px">加载中...</div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- /container -->
+
+<!-- 船讯网弹窗 -->
+<div class="modal-overlay" id="shipModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="modalTitle">🚢 船舶实时动态</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="modalBody"><div style="text-align:center;padding:30px 0;color:#94A3B8"><div style="font-size:32px;margin-bottom:10px">⏳</div><div>正在查询船舶动态...</div></div></div>
+    <div class="modal-ft" id="modalFt"></div>
+  </div>
+</div>
+
+<!-- 海事申报弹窗 -->
+<div class="modal-overlay decl-modal" id="declModal" onclick="if(event.target===this)closeDeclModal()">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="declModalTitle">📋 海事申报</h3><button class="modal-close" onclick="closeDeclModal()">✕</button></div>
+    <div class="modal-body" id="declModalBody"></div>
+    <div class="modal-ft" id="declModalFt"></div>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal-overlay" id="loginModal" onclick="if(event.target===this)closeLoginModal()">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-hd"><h3>🔑 调度员登录</h3><button class="modal-close" onclick="closeLoginModal()">✕</button></div>
+    <div class="modal-body" id="loginModalBody"></div>
+    <div class="modal-ft" id="loginModalFt"></div>
+  </div>
+</div>
+
+<!-- 账号管理弹窗 -->
+<div class="modal-overlay" id="acctModal" onclick="if(event.target===this)closeAcctModal()">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hd"><h3>👥 账号管理</h3><button class="modal-close" onclick="closeAcctModal()">✕</button></div>
+    <div class="modal-body" id="acctModalBody"></div>
+    <div class="modal-ft"><button class="btn" style="background:#E2E8F0;color:#475569" onclick="closeAcctModal()">关闭</button></div>
+  </div>
+</div>
+
+<script src="js/ships-map.js"></script>
+<script src="js/port-chart.js"></script>
+<script src="js/blackboard.js"></script>
+<script src="js/accounts.js"></script>
+<script src="js/app.js"></script>
+<script src="js/ai-assistant.js"></script>
+<script src="js/effects.js"></script>
+</body>
+</html>
