@@ -17,7 +17,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer sk-8b4d15692c5c494c95942f211d33a89a'
+        'Authorization': 'Bearer ' + (env.DEEPSEEK_KEY || '')
       },
       body: request.body
     });
