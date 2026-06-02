@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer DEEPSEEK_KEY_2_REDACTED',
+        'Authorization': 'Bearer ' + (process.env.DEEPSEEK_KEY || '')
         'Accept': 'application/json'
       },
       body: JSON.stringify(body)

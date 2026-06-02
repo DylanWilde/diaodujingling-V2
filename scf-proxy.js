@@ -25,7 +25,7 @@ exports.main_handler = async (event) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer DEEPSEEK_KEY_1_REDACTED'
+        'Authorization': 'Bearer ' + (process.env.DEEPSEEK_KEY || '')
       },
       body: JSON.stringify(body)
     });

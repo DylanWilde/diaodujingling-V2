@@ -17,7 +17,7 @@ export default {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer DEEPSEEK_KEY_2_REDACTED'
+        'Authorization': 'Bearer ' + (env.DEEPSEEK_KEY || '')
       },
       body: request.body
     });

@@ -3,7 +3,7 @@
    代码粘贴后在「HTTP触发器」获取公网URL
    ═══════════════════════════════════════════════════ */
 
-var DEEPSEEK_KEY = 'DEEPSEEK_KEY_1_REDACTED';
+var DEEPSEEK_KEY = process.env.DEEPSEEK_KEY || '';
 
 exports.handler = async (event, context) => {
   /* CORS预检 */
