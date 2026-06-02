@@ -93,7 +93,7 @@
 <div id="t1" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h2>🌊 上海港港口实况 — 码头 & 锚地分布</h2>
+      <h2>🌊 上海港港口实况 — 码头 & 锚地分布</h2>https://developer.baidu.com/article/detail.html?id=4924217
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span id="portWeatherTag" class="tg tg-ok">🌤️ 气象正常</span>
         <span id="portTideTag" class="tg tg-info">🌊 今日高潮 06:42</span>
@@ -256,10 +256,10 @@
 <!-- ════ TAB 6: 数据管理 ════ -->
 <div id="t6" class="tc">
   <div class="cd">
-    <h2>📂 上传船期表（按日期存储，同日期新数据覆盖旧数据）</h2>
+    <h2>📂 上传船期表（按日期存储，同日期新上传覆盖，历史数据持久保留）</h2>
     <div class="uz" onclick="document.getElementById('fu').click()">
       <div style="font-size:1.8rem">📤 点击上传 .xls / .xlsx</div>
-      <div style="font-size:.75rem;color:#64748B;margin-top:4px">自动识别船名/航次/吃水/上下港/码头/英文名/ETA · 每个日期仅保留最新一份 · 上传即覆盖</div>
+      <div style="font-size:.75rem;color:#64748B;margin-top:4px">自动识别船名/航次/吃水/上下港/码头/英文名/ETA · 同日期覆盖旧数据 · 所有历史月份自动归档</div>
     </div>
     <input type="file" id="fu" accept=".xls,.xlsx,.xlsm" onchange="up()" multiple style="display:none">
     <div id="upSt" class="st st-info" style="margin-top:10px">等待上传...</div>
@@ -315,6 +315,18 @@
     </div>
     <div id="sr" class="st st-info">上传后输入船名查询</div>
     <div id="sm" style="margin-top:8px"></div>
+  </div>
+
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <h2 style="margin-bottom:0">📅 月度归档</h2>
+      <button class="btn btn-s btn-sm" onclick="renderMonthlyArchive()">🔄 刷新</button>
+    </div>
+    <p style="color:#64748B;font-size:.75rem;margin-bottom:12px">所有历史船期按月份归档，上传新数据自动合并，不再丢失</p>
+    <div class="ma-stats" id="maStats"></div>
+    <div class="ma-grid" id="maGrid">
+      <div class="st-info" style="text-align:center;padding:20px">加载中...</div>
+    </div>
   </div>
 
 </div>

@@ -369,6 +369,7 @@ async function refreshDates() {
     }
   }
   updateAIStats();
+  renderMonthlyArchive();
 }
 
 function gd() {
@@ -883,6 +884,7 @@ function sw(i) {
   if (i === 6) {
     document.getElementById('sd').disabled = false;
     ld();
+    renderMonthlyArchive();
   }
 }
 
@@ -1282,48 +1284,33 @@ async function publishData() {
   }
   var token = atob(tokenEnc);
 
-  var allData = await getAllData();
-  if (!allData.length) { alert('暂无数据可发布'); return; }
+  var localData = await getAllData();
+  if (!localData.length) { alert('暂无本地数据可发布'); return; }
 
   var btn = document.querySelector('#adminArea button');
-  btn.textContent = '⏳ 发布中...'; btn.disabled = true;
+  btn.textContent = '⏳ 合并远程数据...'; btn.disabled = true;
 
   try {
-    var bbData = await getAllBBMessages();
-    var payload = { ships: allData, blackboard: bbData, updated: Date.now() };
-    var jsonStr = JSON.stringify(payload);
-    /* btoa安全编码UTF-8 */
-    var content = btoa(unescape(encodeURIComponent(jsonStr)));
-    var sha = null;
-
-    /* 1. 获取远程文件SHA（如果存在） */
-    var apiUrl = 'https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath;
-    try {
-      var r1 = await fetch(apiUrl, {
-        headers: { 'Authorization': 'token ' + token }
-      });
-      if (r1.ok) { var info = await r1.json(); sha = info.sha; }
-      else if (r1.status === 404) {
-        /* 文件不存在，将创建新文件 */
-        console.log('远程文件不存在，将创建');
-      } else if (r1.status === 401) {
-        throw new Error('Token无效或已过期（401 Unauthorized）');
-      } else if (r1.status === 403) {
-        throw new Error('Token无权限访问此仓库（403 Forbidden），请确认Token有repo权限');
-      } else {
-        console.log('获取SHA返回: ' + r1.status);
-      }
-    } catch(e) {
-      if (e.message.indexOf('Token') >= 0) throw e;
+    var remote = await fetchRemoteData(token);
+    var mergedShips = remote ? mergeShips(localData, remote.ships) : localData;
+    var mergedBB = remote ? remote.blackboard : [];
+    if (typeof getAllBBMessages === 'function') {
+      try { var bb = await getAllBBMessages(); if (bb.length) mergedBB = bb; } catch(e) {}
     }
 
-    /* 2. 推送数据 */
+    btn.textContent = '⏳ 发布中...';
+    var payload = { ships: mergedShips, blackboard: mergedBB, updated: Date.now() };
+    var jsonStr = JSON.stringify(payload);
+    var content = btoa(unescape(encodeURIComponent(jsonStr)));
+
+    var apiUrl = 'https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath;
+
     var body = {
       message: '🚢 调度精灵数据更新 ' + new Date().toISOString().slice(0, 10),
       content: content,
       branch: APP_CONFIG.githubBranch
     };
-    if (sha) body.sha = sha;
+    if (remote && remote.sha) body.sha = remote.sha;
 
     var r2 = await fetch(apiUrl, {
       method: 'PUT',
@@ -1333,11 +1320,10 @@ async function publishData() {
 
     var result = await r2.json();
     if (r2.ok) {
-      var dateCount = Object.keys(allData.reduce(function(acc,s){acc[s.date]=true;return acc;},{})).length;
-      alert('✅ 发布成功！\n' + allData.length + ' 条船舶 | ' + dateCount + ' 个日期\n1-2分钟后全球生效');
-      document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + allData.length + ' 条 · 所有人可见';
-      /* 发布成功后刷新共享数据 */
-      sharedShips = allData;
+      var dateCount = Object.keys(mergedShips.reduce(function(acc,s){acc[s.date]=true;return acc;},{})).length;
+      alert('✅ 发布成功！\n' + mergedShips.length + ' 条船舶 | ' + dateCount + ' 个日期\n（合并远程 ' + (remote ? remote.ships.length : 0) + ' 条 + 本机 ' + localData.length + ' 条）');
+      document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + mergedShips.length + ' 条 · 所有人可见';
+      sharedShips = mergedShips;
     } else {
       var errMsg = result.message || '未知错误';
       if (r2.status === 422) errMsg = '文件过大或格式错误：' + errMsg;
@@ -1352,32 +1338,62 @@ async function publishData() {
   btn.textContent = '📤 发布到线上'; btn.disabled = false;
 }
 
+async function fetchRemoteData(token) {
+  try {
+    var r = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
+      headers: { 'Authorization': 'token ' + token }
+    });
+    if (r.ok) {
+      var info = await r.json();
+      var jsonStr = decodeURIComponent(escape(atob(info.content)));
+      var data = JSON.parse(jsonStr);
+      return { sha: info.sha, ships: data.ships || [], blackboard: data.blackboard || [] };
+    }
+  } catch(e) { console.log('获取远程数据失败: ' + e.message); }
+  return null;
+}
+
+function mergeShips(localShips, remoteShips) {
+  var localDates = {};
+  localShips.forEach(function(s) { if (s.date) localDates[s.date] = true; });
+
+  var map = {};
+  remoteShips.forEach(function(s) {
+    if (!s.date) return;
+    if (localDates[s.date]) return;
+    map[s.date + '|' + (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'')] = s;
+  });
+  localShips.forEach(function(s) {
+    if (!s.date) return;
+    map[s.date + '|' + (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'')] = s;
+  });
+  return Object.values(map);
+}
+
 async function publishDataSilent() {
   var tokenEnc = localStorage.getItem('gh_token_enc');
   if (!tokenEnc) throw new Error('未配置Token，请手动点"发布到线上"输入');
   var token = atob(tokenEnc);
 
-  var allData = await getAllData();
-  if (!allData.length) throw new Error('no data');
+  var localData = await getAllData();
+  if (!localData.length) throw new Error('no data');
 
-  var bbData = await getAllBBMessages();
-  var payload = { ships: allData, blackboard: bbData, updated: Date.now() };
+  var remote = await fetchRemoteData(token);
+  var mergedShips = remote ? mergeShips(localData, remote.ships) : localData;
+  var mergedBB = remote ? remote.blackboard : [];
+  if (typeof getAllBBMessages === 'function') {
+    try { var bb = await getAllBBMessages(); if (bb.length) mergedBB = bb; } catch(e) {}
+  }
+
+  var payload = { ships: mergedShips, blackboard: mergedBB, updated: Date.now() };
   var content = base64Encode(JSON.stringify(payload, null, 2));
-  var sha = null;
-
-  try {
-    var r1 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
-      headers: { 'Authorization': 'token ' + token }
-    });
-    if (r1.ok) { var info = await r1.json(); sha = info.sha; }
-  } catch(e) {}
 
   var body = {
     message: '🚢 调度精灵数据更新 ' + new Date().toISOString().slice(0, 10),
     content: content,
     branch: APP_CONFIG.githubBranch
   };
-  if (sha) body.sha = sha;
+  if (remote && remote.sha) body.sha = remote.sha;
 
   var r2 = await fetch('https://api.github.com/repos/' + APP_CONFIG.githubOwner + '/' + APP_CONFIG.githubRepo + '/contents/' + APP_CONFIG.dataPath, {
     method: 'PUT',
@@ -1385,7 +1401,7 @@ async function publishDataSilent() {
     body: JSON.stringify(body)
   });
   if (!r2.ok) throw new Error('publish failed');
-  document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + allData.length + ' 条船舶数据';
+  document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>📤 已发布 ' + localData.length + ' 条船舶数据（合并远程 ' + (remote ? remote.ships.length : 0) + ' 条）';
 }
 
 async function tryLoadSharedData() {
@@ -1683,6 +1699,91 @@ async function seedAccounts() {
   await new Promise(function(ok) { tx.oncomplete = function() { ok(); }; });
 }
 
+/* ═══ 月度归档 ═══ */
+async function renderMonthlyArchive() {
+  var allData = isViewerMode ? sharedShips : await getAllData();
+  if (!allData.length) {
+    document.getElementById('maStats').innerHTML = '';
+    document.getElementById('maGrid').innerHTML = '<div class="st-info" style="text-align:center;padding:20px">暂无数据</div>';
+    return;
+  }
+
+  var months = {};
+  allData.forEach(function(s) {
+    if (!s.date) return;
+    var m = s.date.substring(0, 7);
+    if (!months[m]) months[m] = { dates: {}, total: 0 };
+    months[m].dates[s.date] = (months[m].dates[s.date] || 0) + 1;
+    months[m].total++;
+  });
+
+  var sorted = Object.keys(months).sort().reverse();
+  var dateCount = sorted.reduce(function(a, m) { return a + Object.keys(months[m].dates).length; }, 0);
+
+  document.getElementById('maStats').innerHTML =
+    '<div class="ma-stat"><div class="ma-sn">' + allData.length + '</div><div class="ma-sl">总船舶记录</div></div>' +
+    '<div class="ma-stat"><div class="ma-sn">' + dateCount + '</div><div class="ma-sl">覆盖日期</div></div>' +
+    '<div class="ma-stat"><div class="ma-sn">' + sorted.length + '</div><div class="ma-sl">覆盖月份</div></div>';
+
+  var html = '';
+  sorted.forEach(function(m) {
+    var info = months[m];
+    var dates = Object.keys(info.dates).sort().reverse();
+    var dateRows = dates.map(function(d) {
+      return '<div class="ma-date-row" onclick="event.stopPropagation();document.getElementById(\'sd\').value=\'' + d + '\';ld();sw(6)"><span>📅 ' + d + '</span><span class="ma-dn">' + info.dates[d] + ' 条</span></div>';
+    }).join('');
+
+    html += '<div class="ma-card" id="mac-' + m + '" onclick="toggleMonthCard(\'' + m + '\')">' +
+      '<div class="ma-month">📦 ' + m.replace('-', '年') + '月</div>' +
+      '<div class="ma-count">' + info.total + ' 条船期 · ' + dates.length + ' 个日期</div>' +
+      '<div class="ma-dates">' + dateRows + '</div>' +
+      '<div class="ma-actions">' +
+        '<button class="btn btn-s btn-sm" onclick="event.stopPropagation();exportMonthData(\'' + m + '\')">📥 导出</button>' +
+        '<button class="btn btn-s btn-sm" onclick="event.stopPropagation();toggleMonthCard(\'' + m + '\');this.blur()">📂 ' + dates.length + '天</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  document.getElementById('maGrid').innerHTML = html;
+}
+
+function toggleMonthCard(m) {
+  var card = document.getElementById('mac-' + m);
+  if (!card) return;
+  card.classList.toggle('expanded');
+}
+
+function exportMonthData(m) {
+  var allData = isViewerMode ? sharedShips : [];
+  if (!allData.length) {
+    try { var tx = db.transaction('ships', 'readonly'); tx.objectStore('ships').getAll().onsuccess = function(e) {
+      exportMonthRows(m, e.target.result || []);
+    }; } catch(e) { alert('导出失败: ' + e.message); }
+    return;
+  }
+  exportMonthRows(m, allData);
+}
+
+function exportMonthRows(m, allData) {
+  var rows = allData.filter(function(s) { return s.date && s.date.substring(0, 7) === m; });
+  if (!rows.length) { alert(m + ' 无数据'); return; }
+
+  var headers = ['日期', '船名', '英文名', '进口航次', '出口航次', '码头', '抵港吃水', '离港吃水', '上港', '下港', '备注', 'ETA', '海事申报'];
+  var csv = '﻿' + headers.join(',') + '\n';
+  rows.forEach(function(s) {
+    csv += [s.date||'', s.name||'', s.en||'', s.iv||'', s.ev||'', s.tm||'', s.arRaw||s.arV||'', s.drRaw||s.drV||'', s.pp||'', s.np||'', s.rm||'', s.eta||'', s.maritime7?'已完成':'未完成'].map(function(v) {
+      return '"' + String(v).replace(/"/g, '""') + '"';
+    }).join(',') + '\n';
+  });
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = '调度精灵_' + m.replace('-', '') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* ═══ 启动 ═══ */
 (async function() {
   var sharedData = await tryLoadSharedData();
@@ -1811,4 +1912,5 @@ async function seedAccounts() {
   /* 初始化AI助手 */
   if (typeof initAIAssistant === 'function') { initAIAssistant(); }
   updateAIStats();
+  renderMonthlyArchive();
 })();

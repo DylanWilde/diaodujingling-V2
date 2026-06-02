@@ -18,7 +18,7 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer sk-012f84b897de4f93ba6bebf897b637e8'
+        'Authorization': 'Bearer sk-8b4d15692c5c494c95942f211d33a89a'
       },
       body: event.body || '{}'
     });

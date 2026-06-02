@@ -24,11 +24,11 @@ export default async function handler(req, res) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    const resp = await fetch('https://api.deepseek.cn/v1/chat/completions', {
+    const resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer sk-012f84b897de4f93ba6bebf897b637e8',
+        'Authorization': 'Bearer sk-8b4d15692c5c494c95942f211d33a89a',
         'Accept': 'application/json'
       },
       body: JSON.stringify(body)

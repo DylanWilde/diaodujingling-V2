@@ -1,1 +1,7 @@
 .vercel
+.wrangler/
+token.txt
+*.token
+.env
+.env.local
+secrets.json

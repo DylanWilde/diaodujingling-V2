@@ -135,10 +135,11 @@ function parseTerminal(q) {
 /* ═══ 意图识别 ═══ */
 function detectIntent(q) {
   if (/天气|气温|风|浪|能见度|雾|降水|下雨|台风|海况/.test(q)) return 'weather';
-  if (/潮汐|潮高|潮位|高潮|低潮|水流|水深|吃水限制/.test(q)) return 'tide';
+  if (/上海港.*潮汐|各港区.*潮汐|全部.*潮汐|潮汐|潮高|潮位|高潮|低潮|水流|水深|吃水限制/.test(q)) return 'tide';
   if (/港口.*介绍|码头.*分布|港区.*情况|洋山.*介绍|外高桥.*介绍/.test(q)) return 'portInfo';
   if (/有几艘|总共.*船|统计|汇总|数据.*多少|在港|所有日期|哪些日期/.test(q)) return 'stats';
-  if (/海事申报|海事.*完成|未申报|申报.*情况/.test(q)) return 'maritime';
+  if (/24小时.*海事|24h.*海事|一天.*海事|海事申报|海事.*完成|未申报|申报.*情况/.test(q)) return 'maritime';
+  if (/你想查哪条船|查哪条船|查什么船/.test(q)) return 'general';
   if (/什么.*航次|航次.*多少|查.*航次|哪个.*航次/.test(q)) return 'voyage';
   if (/船名|什么船|有哪些船|查.*船|船.*信息|船舶|哪艘/.test(q)) return 'ships';
   if (/上港|下港|从哪里|去哪|航线|航程/.test(q)) return 'route';
@@ -177,15 +178,14 @@ function aiGetDates(allData) {
 
 /* ═══ 大模型配置 ═══ */
 var LLM_CONFIG = {
-  apiKey: localStorage.getItem('llm_key') || 'sk-012f84b897de4f93ba6bebf897b637e8',
+  apiKey: localStorage.getItem('llm_key') || '',
   model: 'deepseek-chat',
   provider: 'DeepSeek',
-  /* 多个端点依次尝试，第一个通的就是当前使用 */
+  /* 多个端点依次尝试，第一个通的就是当前使用
+     serverKey=true 表示代理自带Key，前端不传 Authorization */
   proxies: [
-    { name: '同域', url: '/api/proxy' },
-    { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy' },
-    { name: '直连', url: 'https://api.deepseek.cn/v1/chat/completions' },
-    { name: 'corsproxy', url: 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.cn/v1/chat/completions') }
+    { name: 'Vercel', url: 'https://dispatch-bao-proxy.vercel.app/api/proxy', serverKey: true },
+    { name: '直连', url: 'https://api.deepseek.com/v1/chat/completions', serverKey: false }
   ],
   currentProxy: -1 /* -1=未检测 */
 };
@@ -199,27 +199,32 @@ function hasLLMKey() {
   return !!(LLM_CONFIG.apiKey && LLM_CONFIG.apiKey.length > 20);
 }
 
+function hasServerKeyProxy() {
+  for (var i = 0; i < LLM_CONFIG.proxies.length; i++) {
+    if (LLM_CONFIG.proxies[i].serverKey) return true;
+  }
+  return false;
+}
+
 /* ═══ 连接状态检测 ═══ */
 var LLM_STATUS = 'checking'; /* checking | connected | cors_blocked | nokey | failed */
 
 async function checkLLMConnection() {
-  if (!hasLLMKey()) {
-    LLM_STATUS = 'nokey';
-    updateLLMStatusUI();
-    return;
-  }
   LLM_STATUS = 'checking';
   updateLLMStatusUI();
 
   /* 依次测试每个代理 */
   for (var i = 0; i < LLM_CONFIG.proxies.length; i++) {
     var proxy = LLM_CONFIG.proxies[i];
+
+    /* serverKey代理不需要本地Key */
+    if (!proxy.serverKey && !hasLLMKey()) continue;
+
     try {
       var ctrl = new AbortController();
       setTimeout(function() { ctrl.abort(); }, 8000);
-      /* Vercel代理自带Key，不传Authorization避免触发严格预检 */
       var reqHeaders = { 'Content-Type': 'application/json' };
-      if (proxy.name !== 'Vercel') reqHeaders['Authorization'] = 'Bearer ' + LLM_CONFIG.apiKey;
+      if (!proxy.serverKey) reqHeaders['Authorization'] = 'Bearer ' + LLM_CONFIG.apiKey;
       var resp = await fetch(proxy.url, {
         method: 'POST',
         headers: reqHeaders,
@@ -295,20 +300,27 @@ async function buildSystemPrompt() {
   /* 天气数据 */
   var weather = await fetchLiveWeather();
 
-  return '你是「调度精灵」AI助手，服务于上海港中远海运船舶调度。' +
+  return '你是「调度精灵」AI助手，服务于上海港中远海运船舶调度。请用专业、权威的调度员语气回复。' +
     '\n\n【实时船舶数据库 — ' + latestDate + '】' +
     '\n总记录' + totalShips + '条，覆盖' + dates.length + '个日期。最新日船舶：\n' + shipList +
     (latestShips.length > 15 ? '\n...共' + latestShips.length + '艘（以上为前15艘）' : '') +
     '\n\n【今日气象】气温' + (weather.temp||'?') + ' 风' + (weather.windDir||'?') + (weather.windSpeed||'?') +
     ' 浪高' + (weather.waveHeight||'?') + ' 能见度' + (weather.visibility||'?') +
     ' 天气' + (weather.weatherText||'?') + ' 数据源：' + weather.source +
-    '\n\n【港口知识】洋山深水港(水深17m/全球最大自动化码头)、外高桥(水深12.5m/主力集装箱)、宝山(水深12m/散杂货)、浦东(水深10m/近洋件杂货)。半日潮港，今日洋山高潮06:42(4.2m)/19:15(3.8m)，低潮12:28(1.1m)。' +
-    '\n\n用户将用中文提问。请：' +
-    '\n1. 用专业友好的调度员语气回答' +
+    '\n\n【上海港全港区潮汐（官方参考）】' +
+    '\n洋山深水港：高潮06:42(4.2m)/19:15(3.8m)，低潮12:28(1.1m)，航道水深15-17.5m' +
+    '\n外高桥：高潮06:30(3.8m)/19:00(3.5m)，低潮12:10(1.0m)，航道水深12.5m' +
+    '\n宝山：高潮07:00(3.5m)/19:30(3.2m)，低潮12:50(0.9m)，航道水深10-12m' +
+    '\n浦东：较洋山延迟约30min，航道水深8-10m' +
+    '\n上海港为正规半日潮，数据参考国家海洋信息中心。' +
+    '\n\n用户将用中文提问。请严格遵循以下规则：' +
+    '\n1. 用专业友好的调度员语气，展现中远海运的专业形象' +
     '\n2. 引用数据库中的真实船名/航次/码头/吃水数据' +
-    '\n3. 如问题超出数据范围，诚实说明并给出建议' +
-    '\n4. 回答简洁有用，适当使用表格和emoji' +
-    '\n5. 涉及船期时优先引用最新日期(' + latestDate + ')的数据';
+    '\n3. 用户询问某船时，如数据库无此船，如实说明"当前数据库未收录该船"并引导用户提供其他信息' +
+    '\n4. 海事申报相关查询：重点检索数据库中有ETA字段的船舶，计算ETA是否在24小时内，汇报申报完成状态' +
+    '\n5. 回答简洁权威，适当使用表格和emoji' +
+    '\n6. 涉及船期时优先引用最新日期(' + latestDate + ')的数据' +
+    '\n7. 遇到"你想查哪条船"类提示时，列出数据库中可查询的船名供用户选择';
 }
 
 /* ═══ API调用（轻量请求头避免预检） ═══ */
@@ -330,9 +342,8 @@ async function callLLM(userQuery) {
   });
 
   var proxy = LLM_CONFIG.proxies[LLM_CONFIG.currentProxy];
-  /* Vercel代理自带Key，不需要发送Authorization */
   var headers = { 'Content-Type': 'application/json' };
-  if (proxy.name !== 'Vercel') {
+  if (!proxy.serverKey) {
     headers['Authorization'] = 'Bearer ' + LLM_CONFIG.apiKey;
   }
 
@@ -369,8 +380,8 @@ async function aiQuery(query) {
   var q = query.trim();
   if (!q) return { text: '您好，请问有什么可以帮您？' };
 
-  /* 1. 尝试大模型 */
-  if (hasLLMKey()) {
+  /* 1. 尝试大模型（有本地Key或serverKey代理均可） */
+  if (hasLLMKey() || hasServerKeyProxy()) {
     var llmResult = await callLLM(q);
     if (llmResult) return llmResult;
   }
@@ -453,6 +464,28 @@ function getWeatherAdviceFromLive(w, port) {
 }
 
 function answerTide(q, terminal) {
+  /* 上海港全部港区潮汐 */
+  if (!terminal && /上海港|各港区|全部|所有/.test(q)) {
+    var ports = ['洋山深水港', '外高桥', '宝山', '浦东'];
+    var text = '🌊 **上海港各港区今日潮汐预报**\n\n';
+    text += '| 港区 | 高潮 | 低潮 | 航道水深 |\n|------|------|------|------|\n';
+    ports.forEach(function(p) {
+      var pk = PORT_KNOWLEDGE[p];
+      if (pk) {
+        var tideParts = pk.tides.split('，');
+        var high = tideParts.filter(function(t) { return t.indexOf('高潮') >= 0; }).join(' ') || '—';
+        var low = tideParts.filter(function(t) { return t.indexOf('低潮') >= 0; }).join(' ') || '—';
+        var depth = pk.depth.split('，')[1] || pk.depth.split('，')[0] || '—';
+        text += '| **' + p + '** | ' + high + ' | ' + low + ' | ' + depth + ' |\n';
+      }
+    });
+    text += '\n📐 上海港为正规半日潮港，每日两次高潮两次低潮。' +
+      '洋山港平均潮差3.5m（最大5.5m），外高桥平均潮差2.5m。' +
+      '数据参考国家海洋信息中心潮汐表。' +
+      '\n\n💡 大型船舶建议利用高潮前1小时进港，洋山港超16m吃水需候潮。';
+    return { text: text };
+  }
+
   var port = terminal || '洋山深水港';
   var pk = PORT_KNOWLEDGE[port];
   if (!pk) {
@@ -641,6 +674,10 @@ async function answerVoyage(q, allData) {
 async function answerMaritime(q, allData, date) {
   if (!allData.length) return { text: '📭 数据库暂无数据。' };
 
+  /* 24小时内ETA过滤 */
+  var filter24h = /24小时|24h|一天内|1天内/.test(q);
+  var now = new Date();
+
   var filterDate = date;
   if (!filterDate) {
     var dates = Object.keys(allData.reduce(function(acc, s) { acc[s.date] = true; return acc; }, {})).sort().reverse();
@@ -648,18 +685,42 @@ async function answerMaritime(q, allData, date) {
   }
 
   var ships = allData.filter(function(s) { return s.date === filterDate; });
+
+  /* 24h ETA 过滤 */
+  if (filter24h) {
+    var etaShips = [];
+    ships.forEach(function(s) {
+      if (!s.eta) return;
+      var etaStr = String(s.eta);
+      /* ETA格式可能是 YYYY-MM-DD HH:MM 或 MM-DD HH:MM 或其他 */
+      var m = etaStr.match(/(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})\s*(\d{2}:\d{2})?/);
+      if (m) {
+        try {
+          var etaDate = new Date(m[0].replace(/(\d{4})-(\d{2})-(\d{2})/, '$1-$2-$3T' + (m[2] || '00:00') + ':00+08:00'));
+          if (!isNaN(etaDate.getTime())) {
+            var diffMs = etaDate.getTime() - now.getTime();
+            var diffH = diffMs / 3600000;
+            if (diffH >= -2 && diffH <= 24) etaShips.push(s);
+          }
+        } catch(e) {}
+      }
+    });
+    ships = etaShips;
+  }
+
   var done = ships.filter(function(s) { return s.maritime7; });
   var pending = ships.filter(function(s) { return !s.maritime7; });
 
+  var prefix = filter24h ? '📋 **24小时内ETA船舶 · 海事申报**' : '📋 **海事申报情况** — ' + filterDate;
   return {
-    text: '📋 **海事申报情况** — ' + filterDate + '\n\n' +
+    text: prefix + '\n\n' +
       '| 状态 | 数量 |\n|------|------|\n' +
       '| ✅ 已完成 | ' + done.length + ' 艘 |\n' +
       '| ⏳ 未完成 | ' + pending.length + ' 艘 |\n' +
       '| 📊 合计 | ' + ships.length + ' 艘 |\n\n' +
-      (pending.length ? '**未完成船舶**：\n' + pending.map(function(s) {
+      (pending.length ? '⏳ **未完成船舶**：\n' + pending.map(function(s) {
         return '• ' + s.name + '（' + (s.iv||'?') + '/' + (s.ev||'?') + '）— ' + escHtml(s.tm||'');
-      }).join('\n') : '✅ 所有船舶海事申报已完成！')
+      }).join('\n') : '✅ **所有24小时内ETA船舶均已完成海事申报！**')
   };
 }
 
@@ -753,6 +814,31 @@ function detectMood(q) {
 function smartReply(q, allData, dates) {
   var low = q.toLowerCase().trim();
   var mood = detectMood(q);
+
+  /* ═══ 专业查询优先处理 ═══ */
+
+  /* 查某艘船 — 引导用户输入船名 */
+  if (/你想查哪条船|查哪条船|查什么船|查哪个船/.test(q)) {
+    var shipNames = {};
+    allData.forEach(function(s) { shipNames[s.name] = true; });
+    var nameList = Object.keys(shipNames).sort();
+    var nameHint = nameList.length > 0
+      ? '\n\n📋 当前数据库中有以下船舶：\n' + nameList.map(function(n) { return '• ' + n; }).join('\n')
+      : '';
+    return '⚓ **请告诉我您想查询哪条船舶的最新动态？**\n\n直接输入船名即可，我会为您调取该船的所有历史记录，包括：\n' +
+      '• 📅 各日期靠离泊信息\n• 📐 抵港/离港吃水\n• 🏗️ 码头分配\n• 🗺️ 上下港航线\n• ⏰ ETA时间\n• 📝 备注与海事申报状态' +
+      nameHint;
+  }
+
+  /* 上海港各港区潮汐 */
+  if (/上海港.*潮汐|各港区.*潮汐|全部.*潮汐|所有.*潮汐|上海.*潮汐/.test(q)) {
+    return answerTide(q, null).text;
+  }
+
+  /* 24h ETA海事申报 */
+  if (/24小时.*海事|24h.*海事|一天.*海事|1天.*海事/.test(q)) {
+    return '📋 正在查询数据库中24小时内ETA船舶的海事申报情况...\n\n请稍候，我需要在数据库中逐条比对ETA时间。如果已连接大模型，我会自动完成此查询。';
+  }
 
   /* ═══ 情绪安抚优先 ═══ */
   if (mood === 'angry') {
@@ -990,8 +1076,8 @@ function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&
 /* ═══ 聊天 UI ═══ */
 var AI_QUICK_QUERIES = [
   { label: '📅 最新船期', q: '今天有哪些船？' },
-  { label: '🔍 查某艘船', q: '查询仁川协成' },
-  { label: '🌊 洋山潮汐', q: '洋山港今天的潮汐情况' },
+  { label: '🔍 查某艘船', q: '你想查哪条船的最新动态？' },
+  { label: '🌊 上海港潮汐', q: '上海港各港区今日潮汐' },
   { label: '🌤️ 天气评估', q: '现在天气适合靠泊吗？' },
   { label: '📊 数据统计', q: '数据库一共有多少条记录？' },
   { label: '📋 海事申报', q: '最近的海事申报完成情况' },
@@ -1052,7 +1138,7 @@ function welcomeMessage() {
   /* 异步检测连接 */
   checkLLMConnection();
 
-  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : '💾 本地引擎（点击 ⚙️ 配置 DeepSeek API Key）';
+  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : (hasServerKeyProxy() ? '🌐 Vercel云端代理 · DeepSeek大模型' : '💾 本地引擎（离线模式）');
   var text = '您好！我是 **调度精灵 AI 助手** ⚓\n\n' +
     '当前模式：**' + brain + '**\n\n' +
     '🔍 **船舶查询**：默认返回最新日期数据\n' +

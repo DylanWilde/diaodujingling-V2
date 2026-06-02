@@ -555,3 +555,22 @@ input:disabled,select:disabled,textarea:disabled{background:#E2E8F0;color:#94A3B
   .ai-msg-bot { padding-right: 10px; }
 }
 
+/* ═══ 月度归档 ═══ */
+.ma-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ma-stat { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 16px; text-align: center; min-width: 80px; }
+.ma-stat .ma-sn { font-size: 1.3rem; font-weight: 800; color: #2563EB; }
+.ma-stat .ma-sl { font-size: .65rem; color: #64748B; margin-top: 2px; }
+.ma-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.ma-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px; cursor: pointer; transition: .15s; }
+.ma-card:hover { border-color: #2563EB; background: #EFF6FF; box-shadow: 0 2px 8px rgba(37,99,235,.1); }
+.ma-card.expanded { border-color: #2563EB; background: #fff; box-shadow: 0 2px 12px rgba(37,99,235,.12); }
+.ma-month { font-size: .95rem; font-weight: 700; color: #0F172A; }
+.ma-count { font-size: .75rem; color: #64748B; margin-top: 4px; }
+.ma-dates { display: none; margin-top: 10px; border-top: 1px solid #E2E8F0; padding-top: 10px; }
+.ma-card.expanded .ma-dates { display: block; }
+.ma-date-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-radius: 6px; font-size: .78rem; }
+.ma-date-row:hover { background: #F1F5F9; }
+.ma-date-row span { color: #475569; }
+.ma-date-row .ma-dn { color: #2563EB; font-weight: 600; }
+.ma-actions { display: flex; gap: 6px; margin-top: 8px; }
+
