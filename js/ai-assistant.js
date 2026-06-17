@@ -178,7 +178,7 @@ function aiGetDates(allData) {
 
 /* ═══ 大模型配置 ═══ */
 var LLM_CONFIG = {
-  apiKey: localStorage.getItem('llm_key') || '',
+  apiKey: '',
   model: 'deepseek-chat',
   provider: 'DeepSeek',
   /* 多个端点依次尝试，第一个通的就是当前使用
@@ -190,21 +190,19 @@ var LLM_CONFIG = {
   currentProxy: -1 /* -1=未检测 */
 };
 
+async function initLLMKey() {
+  var key = await secureLoad('llm_key');
+  LLM_CONFIG.apiKey = key || '';
+}
+
 function setLLMKey(key) {
   LLM_CONFIG.apiKey = key.trim();
-  localStorage.setItem('llm_key', LLM_CONFIG.apiKey);
+  secureStore('llm_key', LLM_CONFIG.apiKey);
 }
 
-function hasLLMKey() {
-  return !!(LLM_CONFIG.apiKey && LLM_CONFIG.apiKey.length > 20);
-}
-
-function hasServerKeyProxy() {
-  for (var i = 0; i < LLM_CONFIG.proxies.length; i++) {
-    if (LLM_CONFIG.proxies[i].serverKey) return true;
-  }
-  return false;
-}
+/* ── V7: API模式已禁用，纯本地数据库查询 ── */
+function hasLLMKey() { return false; }
+function hasServerKeyProxy() { return false; }
 
 /* ═══ 连接状态检测 ═══ */
 var LLM_STATUS = 'checking'; /* checking | connected | cors_blocked | nokey | failed */
@@ -248,39 +246,10 @@ async function checkLLMConnection() {
 function updateLLMStatusUI() {
   var tag = document.getElementById('aiDbStats');
   if (!tag) return;
-
-  switch (LLM_STATUS) {
-    case 'connected':
-      var pn = LLM_CONFIG.proxies[LLM_CONFIG.currentProxy];
-      tag.textContent = '🧠 DeepSeek 已连接' + (pn ? ' · ' + pn.name : '');
-      tag.style.background = '#ECFDF5';
-      tag.style.color = '#059669';
-      tag.style.fontWeight = '700';
-      break;
-    case 'checking':
-      tag.textContent = '⏳ 正在连接DeepSeek...';
-      tag.style.background = '#FFFBEB';
-      tag.style.color = '#D97706';
-      tag.style.fontWeight = '400';
-      break;
-    case 'cors_blocked':
-      tag.textContent = '⚠ CORS拦截·需代理';
-      tag.style.background = '#FEF2F2';
-      tag.style.color = '#DC2626';
-      tag.style.fontWeight = '700';
-      break;
-    case 'nokey':
-      tag.textContent = '🔑 未配置API Key';
-      tag.style.background = '#F1F5F9';
-      tag.style.color = '#64748B';
-      tag.style.fontWeight = '400';
-      break;
-    default:
-      tag.textContent = '❌ DeepSeek 未连接';
-      tag.style.background = '#FEF2F2';
-      tag.style.color = '#DC2626';
-      tag.style.fontWeight = '700';
-  }
+  tag.textContent = '💾 本地数据库 · 离线模式';
+  tag.style.background = '#EFF6FF';
+  tag.style.color = '#2563EB';
+  tag.style.fontWeight = '600';
 }
 
 /* ═══ 构建系统提示词（注入实时数据上下文） ═══ */
@@ -1135,15 +1104,14 @@ function welcomeMessage() {
 
   /* 先显示检测中 */
   updateLLMStatusUI();
-  /* 异步检测连接 */
-  checkLLMConnection();
+  updateLLMStatusUI();
 
-  var brain = hasLLMKey() ? '🧠 DeepSeek大模型 · 智能对话' : (hasServerKeyProxy() ? '🌐 Vercel云端代理 · DeepSeek大模型' : '💾 本地引擎（离线模式）');
   var text = '您好！我是 **调度精灵 AI 助手** ⚓\n\n' +
-    '当前模式：**' + brain + '**\n\n' +
-    '🔍 **船舶查询**：默认返回最新日期数据\n' +
-    '🌤️ **天气水文**：Open-Meteo实时气象 + 港口知识库\n' +
-    '📍 **港口信息**：洋山、外高桥、宝山、浦东\n\n' +
+    '当前模式：**💾 本地数据库引擎（离线）**\n\n' +
+    '🔍 **船舶查询**：检索全部历史船期数据\n' +
+    '📊 **统计分析**：码头作业量、月度趋势、吃水分布\n' +
+    '📍 **港口信息**：洋山、外高桥、宝山、浦东知识库\n' +
+    '📋 **海事申报**：查看申报完成状态\n\n' +
     '👈 点击下方快捷提问，或直接输入您的问题。';
 
   addAIMessage(text);

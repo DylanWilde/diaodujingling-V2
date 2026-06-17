@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/effects.css">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -24,12 +25,12 @@
 
 <div class="tb">
   <button class="tb-btn on" onclick="sw(0)">🧠 调度精灵AI</button>
-  <button class="tb-btn" onclick="sw(1)">🌊 港口实况</button>
-  <button class="tb-btn" onclick="sw(2)">🚢 船舶动态</button>
-  <button class="tb-btn" onclick="sw(3)">📋 海事申报</button>
-  <button class="tb-btn" onclick="sw(4)" id="tbAdmin1">📡 引航转换</button>
-  <button class="tb-btn" onclick="sw(5)" id="tbAdmin2">📝 调度黑板</button>
-  <button class="tb-btn" onclick="sw(6)" id="tbAdmin3">⚙️ 数据管理</button>
+  <button class="tb-btn" onclick="sw(1)">🚢 船舶动态</button>
+  <button class="tb-btn" onclick="sw(2)">📋 海事申报</button>
+  <button class="tb-btn" onclick="sw(3)" id="tbAdmin1">📡 引航转换</button>
+  <button class="tb-btn" onclick="sw(4)" id="tbAdmin2">📝 调度黑板</button>
+  <button class="tb-btn" onclick="sw(5)" id="tbAdmin3">⚙️ 数据管理</button>
+  <button class="tb-btn" onclick="sw(6)" id="tbAnalytics" style="color:#7C3AED">📊 数据分析</button>
 </div>
 
 <!-- ════ TAB 0: 调度精灵AI ════ -->
@@ -89,69 +90,8 @@
   </div>
 </div>
 
-<!-- ════ TAB 1: 港口实况 ════ -->
+<!-- ════ TAB 1: 船舶动态 ════ -->
 <div id="t1" class="tc">
-  <div class="cd">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <h2>🌊 上海港港口实况 — 码头 & 锚地分布</h2>https://developer.baidu.com/article/detail.html?id=4924217
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span id="portWeatherTag" class="tg tg-ok">🌤️ 气象正常</span>
-        <span id="portTideTag" class="tg tg-info">🌊 今日高潮 06:42</span>
-      </div>
-    </div>
-    <p style="color:#64748B;font-size:.8rem;margin:4px 0 10px">洋山深水港 · 外高桥 · 宝山 · 浦东 各码头及锚地位置标注 · 实时水文气象叠加</p>
-  </div>
-  <div class="port-map">
-    <div class="port-map-bg">
-      <div class="port-coast"></div>
-      <div class="port-river"></div>
-      <div class="port-marker port-marker-t1" title="洋山深水港"><span>洋山深水港</span><i>深水集装箱枢纽 · 水深17m</i></div>
-      <div class="port-marker port-marker-t2" title="洋山四期"><span>洋山四期</span><i>全自动化码头 · 水深16m</i></div>
-      <div class="port-marker port-marker-t3" title="外高桥一期"><span>外高桥一期</span><i>集装箱/滚装 · 水深12.5m</i></div>
-      <div class="port-marker port-marker-t4" title="外高桥二期"><span>外高桥二期</span><i>集装箱码头 · 水深12.5m</i></div>
-      <div class="port-marker port-marker-t5" title="外高桥三四期"><span>外高桥三四期</span><i>多用途码头 · 水深12.5m</i></div>
-      <div class="port-marker port-marker-t6" title="外高桥五期"><span>外高桥五期</span><i>集装箱码头 · 水深13m</i></div>
-      <div class="port-marker port-marker-t7" title="浦东码头"><span>浦东码头</span><i>散杂货/集装箱 · 水深10m</i></div>
-      <div class="port-marker port-marker-t8" title="宝山码头"><span>宝山码头</span><i>散货/件杂货 · 水深12m</i></div>
-      <div class="port-marker port-marker-t9" title="罗泾码头"><span>罗泾码头</span><i>煤炭/矿石 · 水深11m</i></div>
-      <div class="port-marker port-marker-t10" title="军工路码头"><span>军工路码头</span><i>件杂货/钢材 · 水深9m</i></div>
-      <div class="port-anchorage port-anch-a1" title="长江口1号锚地">⚓ 长江口1号锚地</div>
-      <div class="port-anchorage port-anch-a2" title="长江口2号锚地">⚓ 长江口2号锚地</div>
-      <div class="port-anchorage port-anch-a3" title="绿华山锚地">⚓ 绿华山锚地</div>
-      <div class="port-anchorage port-anch-a4" title="洋山港锚地">⚓ 洋山港锚地</div>
-      <div class="port-anchorage port-anch-a5" title="南槽锚地">⚓ 南槽锚地</div>
-      <div class="port-anchorage port-anch-a6" title="宝山锚地">⚓ 宝山锚地</div>
-    </div>
-    <div class="port-legend">
-      <span><i class="port-dot-t"></i> 码头/Terminal</span>
-      <span><i class="port-dot-a"></i> 锚地/Anchorage</span>
-      <span style="margin-left:12px;color:#64748B;font-size:10px">📡 数据源：港务局 + hidolphin气象</span>
-    </div>
-  </div>
-  <div class="cd" style="margin-top:12px">
-    <div style="display:flex;gap:16px;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px">
-        <h3 style="font-size:13px;font-weight:700;color:#2563EB;margin-bottom:8px">🌊 各港区今日潮汐</h3>
-        <div style="font-size:12px;color:#475569;line-height:1.8">
-          <div><b>洋山深水港</b>：高潮 06:42(4.2m) / 19:15(3.8m) · 低潮 12:28(1.1m)</div>
-          <div><b>外高桥</b>：高潮 06:30(3.8m) / 19:00(3.5m) · 低潮 12:10(1.0m)</div>
-          <div><b>宝山</b>：高潮 07:00(3.5m) / 19:30(3.2m) · 低潮 12:50(0.9m)</div>
-        </div>
-      </div>
-      <div style="flex:1;min-width:200px">
-        <h3 style="font-size:13px;font-weight:700;color:#DC2626;margin-bottom:8px">⚠ 当前预警</h3>
-        <div style="font-size:12px;color:#475569;line-height:1.8">
-          <div>🟡 今日14:30低潮0.8m · 洋山4#限吃水＜12m</div>
-          <div>🟡 明日偏北风5-6级 · 浪高1.5m</div>
-          <div>🟢 其他港区作业条件正常</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ════ TAB 2: 船舶动态 ════ -->
-<div id="t2" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <h2>🚢 上海港船舶动态 — 按码头分组</h2>
@@ -189,8 +129,8 @@
   <div id="dg"><div class="st-big">📂 请先上传船期表</div></div>
 </div>
 
-<!-- ════ TAB 3: 海事申报 ════ -->
-<div id="t3" class="tc">
+<!-- ════ TAB 2: 海事申报 ════ -->
+<div id="t2" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <h2>📋 海事申报看板 — 按码头分组</h2>
@@ -214,8 +154,8 @@
   <div id="dg3"><div class="st-big">📂 请先上传船期表</div></div>
 </div>
 
-<!-- ════ TAB 4: 引航转换 ════ -->
-<div id="t4" class="tc">
+<!-- ════ TAB 3: 引航转换 ════ -->
+<div id="t3" class="tc">
   <div class="cd">
     <h2>📡 引航站格式转换器</h2>
     <div class="r">
@@ -231,8 +171,8 @@
   </div>
 </div>
 
-<!-- ════ TAB 5: 调度黑板 ════ -->
-<div id="t5" class="tc">
+<!-- ════ TAB 4: 调度黑板 ════ -->
+<div id="t4" class="tc">
   <div class="cd">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <h2>📝 调度当日提醒黑板</h2>
@@ -253,8 +193,8 @@
   </div>
 </div>
 
-<!-- ════ TAB 6: 数据管理 ════ -->
-<div id="t6" class="tc">
+<!-- ════ TAB 5: 数据管理 ════ -->
+<div id="t5" class="tc">
   <div class="cd">
     <h2>📂 上传船期表（按日期存储，同日期新上传覆盖，历史数据持久保留）</h2>
     <div class="uz" onclick="document.getElementById('fu').click()">
@@ -331,6 +271,109 @@
 
 </div>
 
+<!-- ════ TAB 6: 数据分析 ════ -->
+<div id="t6" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div>
+        <h2 style="margin-bottom:4px">📊 数据分析中心 · 领导层汇报面板</h2>
+        <p style="color:#64748B;font-size:.75rem">船期数据分析 · 码头作业 · 月度趋势 · 航线流量 · 吃水分布 · 海事统计</p>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <select id="anDateRange" onchange="renderAnalytics()" style="width:auto;min-width:140px">
+          <option value="all">全部数据</option>
+          <option value="7d">最近7天</option>
+          <option value="30d">最近30天</option>
+          <option value="3m">最近3个月</option>
+          <option value="6m">最近6个月</option>
+          <option value="1y">最近1年</option>
+        </select>
+        <button class="btn btn-s btn-sm" onclick="renderAnalytics()">🔄 刷新</button>
+        <button class="btn btn-s btn-sm" onclick="exportAnalyticsReport()">📄 导出汇报</button>
+      </div>
+    </div>
+
+    <!-- 概览数字 -->
+    <div class="sb" id="anOverview">
+      <div class="sb-item sb-blue"><div class="n" id="anTotalShips">—</div><div class="l">船舶总数</div></div>
+      <div class="sb-item sb-gray"><div class="n" id="anTotalDates">—</div><div class="l">覆盖天数</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="anTotalMonths">—</div><div class="l">覆盖月份</div></div>
+      <div class="sb-item sb-green"><div class="n" id="anMaritimeRate">—</div><div class="l">海事申报率</div></div>
+      <div class="sb-item sb-gray"><div class="n" id="anActiveTerms">—</div><div class="l">活跃码头</div></div>
+      <div class="sb-item sb-blue"><div class="n" id="anUniqueShips">—</div><div class="l">不重复船舶</div></div>
+    </div>
+  </div>
+
+  <!-- 图表网格 -->
+  <div class="an-charts">
+    <!-- 行1: 码头柱状图 + 月度趋势 -->
+    <div class="an-chart-row">
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🏗️ 码头作业量排名</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">各码头船舶数量 & 海事完成率对比</p>
+        <div style="height:300px"><canvas id="chartTerminals"></canvas></div>
+      </div>
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📈 月度船舶趋势</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">每月船舶数量 & 海事申报率变化</p>
+        <div style="height:300px"><canvas id="chartMonthly"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 行2: 航线 + 吃水 -->
+    <div class="an-chart-row">
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🗺️ 主要航线流量 (Top 15)</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">上港→下港 贸易流向分析</p>
+        <div style="height:300px"><canvas id="chartRoutes"></canvas></div>
+      </div>
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📐 吃水分布直方图</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">抵港吃水(蓝) / 离港吃水(红) 频率分布</p>
+        <div style="height:300px"><canvas id="chartDraft"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 行3: ETA + 海事 -->
+    <div class="an-chart-row">
+      <div class="cd an-chart-box an-chart-box--third">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">⏰ ETA 预警分布</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">船舶预抵时间预警等级统计</p>
+        <div style="height:260px"><canvas id="chartETA"></canvas></div>
+      </div>
+      <div class="cd an-chart-box an-chart-box--third">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">✅ 海事申报进度</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">已完成 vs 未完成 申报比例</p>
+        <div style="height:260px"><canvas id="chartMaritime"></canvas></div>
+      </div>
+      <div class="cd an-chart-box an-chart-box--third">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">👤 调度员确认统计</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">各调度员海事申报确认数量</p>
+        <div style="height:260px"><canvas id="chartDispatchers"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 行4: 高频船舶表 + 航线详情 -->
+    <div class="an-chart-row">
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🚢 高频船舶排名 (Top 15)</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">统计期内访问次数最多的船舶</p>
+        <div class="tw" style="max-height:300px;overflow-y:auto">
+          <table>
+            <tr><th>#</th><th>船名</th><th>到港次数</th><th>覆盖天数</th><th>常靠码头</th></tr>
+            <tbody id="anFreqTable"><tr><td colspan="5" style="text-align:center;color:#94A3B8">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="cd an-chart-box">
+        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📋 调度数据汇报文本</h3>
+        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">一键导出领导层数据分析报告</p>
+        <textarea id="anReportText" readonly style="height:280px;font-family:'Consolas','Microsoft YaHei',monospace;font-size:11px;background:#F8FAFC;resize:none" placeholder="点击「导出汇报」生成报告..."></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /container -->
 
 <!-- 船讯网弹窗 -->
@@ -369,10 +412,12 @@
   </div>
 </div>
 
+<script src="js/crypto-utils.js"></script>
 <script src="js/ships-map.js"></script>
 <script src="js/port-chart.js"></script>
 <script src="js/blackboard.js"></script>
 <script src="js/accounts.js"></script>
+<script src="js/analytics.js"></script>
 <script src="js/app.js"></script>
 <script src="js/ai-assistant.js"></script>
 <script src="js/effects.js"></script>

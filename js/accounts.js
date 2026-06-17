@@ -7,22 +7,15 @@
 var ACCOUNTS_DB = 'DDB_v5';
 var currentUser = null;
 
-/* 简单哈希 (非加密，仅防明文存储) */
-function simpleHash(s) {
-  var h = 0;
-  for (var i = 0; i < s.length; i++) {
-    h = ((h << 5) - h) + s.charCodeAt(i);
-    h |= 0;
-  }
-  return 'h_' + Math.abs(h).toString(36);
-}
+/* SHA-256 密码哈希（定义在 crypto-utils.js） */
 
 /* 初始化accounts store */
 function initAccountsStore(d) {
   if (!d.objectStoreNames.contains('accounts')) {
     var st = d.createObjectStore('accounts', { keyPath: 'username' });
-    /* 创建默认管理员 */
-    st.add({ username: 'admin', password: simpleHash('admin888'), role: 'admin', created: Date.now() });
+    var setupPwd = generatePassword(12);
+    st.add({ username: 'admin', password: secureHash(setupPwd), role: 'admin', created: Date.now(), needReset: true });
+    window._setupPassword = setupPwd;
   }
 }
 
@@ -37,7 +30,7 @@ function registerAccount(username, password, role) {
       var r = st.get(username);
       r.onsuccess = function() {
         if (r.result) { no('账号已存在'); return; }
-        st.add({ username: username, password: simpleHash(password), role: role || 'dispatcher', created: Date.now() });
+        st.add({ username: username, password: secureHash(password), role: role || 'dispatcher', created: Date.now() });
         tx.oncomplete = function() { ok(true); };
       };
       r.onerror = function() { no('查询失败'); };
@@ -57,8 +50,9 @@ function loginAccount(username, password) {
       r.onsuccess = function() {
         var acc = r.result;
         if (!acc) { no('账号不存在'); return; }
-        if (acc.password !== simpleHash(password)) { no('密码错误'); return; }
+        if (!verifyHash(password, acc.password)) { no('密码错误'); return; }
         currentUser = { username: acc.username, role: acc.role };
+        if (window._upgradeHash) { upgradeStoredHash(db || window._bbDB, username); }
         ok(currentUser);
       };
       r.onerror = function() { no('查询失败'); };
@@ -75,12 +69,14 @@ function logoutAccount() {
   document.getElementById('userArea').style.display = 'none';
   document.getElementById('loginArea').style.display = '';
   document.getElementById('adminArea').style.display = 'none';
-  for (var t = 2; t <= 6; t++) {
+  for (var t = 1; t <= 6; t++) {
     var btn = document.querySelectorAll('.tb-btn')[t];
     if (btn) btn.style.display = 'none';
   }
-  localStorage.removeItem('gh_token_enc');
-  localStorage.removeItem('dispatch_user');
+  ['gh_token','llm_key','dispatch_user','shipxy_key'].forEach(function(k) {
+    localStorage.removeItem('enc:' + k);
+    localStorage.removeItem(k);
+  });
   alert('已退出登录');
   location.reload();
 }
@@ -110,9 +106,11 @@ function updateUserUI() {
   var tb1 = document.getElementById('tbAdmin1');
   var tb2 = document.getElementById('tbAdmin2');
   var tb3 = document.getElementById('tbAdmin3');
-  if (tb1) tb1.style.display = '';  /* 引航转换 */
-  if (tb2) tb2.style.display = '';  /* 调度黑板 */
-  if (tb3) tb3.style.display = currentUser.role === 'admin' ? '' : 'none';  /* 数据管理: 仅管理员 */
+  var tb4 = document.getElementById('tbAnalytics');
+  if (tb1) tb1.style.display = '';
+  if (tb2) tb2.style.display = '';
+  if (tb3) tb3.style.display = currentUser.role === 'admin' ? '' : 'none';
+  if (tb4) tb4.style.display = '';
 
   if (currentUser.role === 'admin') {
     document.getElementById('adminArea').style.display = 'inline';
