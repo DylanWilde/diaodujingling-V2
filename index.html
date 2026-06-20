@@ -274,102 +274,115 @@
 <!-- ════ TAB 6: 数据分析 ════ -->
 <div id="t6" class="tc">
   <div class="cd">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
       <div>
-        <h2 style="margin-bottom:4px">📊 数据分析中心 · 领导层汇报面板</h2>
-        <p style="color:#64748B;font-size:.75rem">船期数据分析 · 码头作业 · 月度趋势 · 航线流量 · 吃水分布 · 海事统计</p>
+        <h2 style="margin-bottom:4px">📊 船舶代理数据分析中心</h2>
+        <p style="color:#64748B;font-size:.75rem" id="anPeriodLabel">选择时间跨度进行多维分析</p>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <select id="anDateRange" onchange="renderAnalytics()" style="width:auto;min-width:140px">
-          <option value="all">全部数据</option>
-          <option value="7d">最近7天</option>
-          <option value="30d">最近30天</option>
-          <option value="3m">最近3个月</option>
-          <option value="6m">最近6个月</option>
-          <option value="1y">最近1年</option>
-        </select>
-        <button class="btn btn-s btn-sm" onclick="renderAnalytics()">🔄 刷新</button>
-        <button class="btn btn-s btn-sm" onclick="exportAnalyticsReport()">📄 导出汇报</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <div style="display:flex;gap:2px;background:#F1F5F9;border-radius:8px;padding:3px">
+          <button class="an-period-btn on" onclick="setAnalyticsPeriod('week')" id="anBtnWeek">周</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('month')" id="anBtnMonth">月</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('quarter')" id="anBtnQuarter">季</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('year')" id="anBtnYear">年</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('all')" id="anBtnAll">全部</button>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="exportAnalyticsReport()">📄 导出汇报</button>
       </div>
     </div>
 
-    <!-- 概览数字 -->
+    <!-- 概览数字 6卡片 -->
     <div class="sb" id="anOverview">
-      <div class="sb-item sb-blue"><div class="n" id="anTotalShips">—</div><div class="l">船舶总数</div></div>
-      <div class="sb-item sb-gray"><div class="n" id="anTotalDates">—</div><div class="l">覆盖天数</div></div>
-      <div class="sb-item sb-amber"><div class="n" id="anTotalMonths">—</div><div class="l">覆盖月份</div></div>
+      <div class="sb-item sb-blue"><div class="n" id="anTotalShips">—</div><div class="l">代理船舶艘次</div></div>
+      <div class="sb-item sb-gray"><div class="n" id="anUniqueShips">—</div><div class="l">不重复船舶</div></div>
+      <div class="sb-item sb-amber"><div class="n" id="anActiveDays">—</div><div class="l">活跃天数</div></div>
       <div class="sb-item sb-green"><div class="n" id="anMaritimeRate">—</div><div class="l">海事申报率</div></div>
-      <div class="sb-item sb-gray"><div class="n" id="anActiveTerms">—</div><div class="l">活跃码头</div></div>
-      <div class="sb-item sb-blue"><div class="n" id="anUniqueShips">—</div><div class="l">不重复船舶</div></div>
+      <div class="sb-item sb-blue"><div class="n" id="anActiveTerms">—</div><div class="l">活跃码头</div></div>
+      <div class="sb-item sb-red"><div class="n" id="anEtaDanger">—</div><div class="l">24h紧急预警</div></div>
     </div>
   </div>
 
-  <!-- 图表网格 -->
+  <!-- 图表区域 -->
   <div class="an-charts">
-    <!-- 行1: 码头柱状图 + 月度趋势 -->
+
+    <!-- 行1: 码头柱状图 + 时间趋势 -->
     <div class="an-chart-row">
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🏗️ 码头作业量排名</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">各码头船舶数量 & 海事完成率对比</p>
+        <h3>🏗️ 码头作业量排名</h3>
+        <p>各码头代理船舶数量 · 海事完成率对比</p>
         <div style="height:300px"><canvas id="chartTerminals"></canvas></div>
       </div>
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📈 月度船舶趋势</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">每月船舶数量 & 海事申报率变化</p>
-        <div style="height:300px"><canvas id="chartMonthly"></canvas></div>
+        <h3 id="anTrendTitle">📈 周度趋势</h3>
+        <p>船舶数量 & 海事申报率变化</p>
+        <div style="height:300px"><canvas id="chartTrend"></canvas></div>
       </div>
     </div>
 
     <!-- 行2: 航线 + 吃水 -->
     <div class="an-chart-row">
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🗺️ 主要航线流量 (Top 15)</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">上港→下港 贸易流向分析</p>
+        <h3>🗺️ 航线流量 Top 15</h3>
+        <p>上港→下港贸易流向 · 高频航线识别</p>
         <div style="height:300px"><canvas id="chartRoutes"></canvas></div>
       </div>
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📐 吃水分布直方图</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">抵港吃水(蓝) / 离港吃水(红) 频率分布</p>
+        <h3>📐 吃水分布</h3>
+        <p>抵港(蓝) / 离港(红) 吃水频率 · 船型结构分析</p>
         <div style="height:300px"><canvas id="chartDraft"></canvas></div>
       </div>
     </div>
 
-    <!-- 行3: ETA + 海事 -->
+    <!-- 行3: ETA + 海事 + 调度员 -->
     <div class="an-chart-row">
       <div class="cd an-chart-box an-chart-box--third">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">⏰ ETA 预警分布</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">船舶预抵时间预警等级统计</p>
-        <div style="height:260px"><canvas id="chartETA"></canvas></div>
+        <h3>⏰ ETA预警</h3>
+        <p>24h紧急 / 48h关注 / 正常 / 过期</p>
+        <div style="height:240px"><canvas id="chartETA"></canvas></div>
       </div>
       <div class="cd an-chart-box an-chart-box--third">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">✅ 海事申报进度</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">已完成 vs 未完成 申报比例</p>
-        <div style="height:260px"><canvas id="chartMaritime"></canvas></div>
+        <h3>✅ 海事申报进度</h3>
+        <p>已完成 vs 待完成 · 合规率追踪</p>
+        <div style="height:240px"><canvas id="chartMaritime"></canvas></div>
       </div>
       <div class="cd an-chart-box an-chart-box--third">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">👤 调度员确认统计</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">各调度员海事申报确认数量</p>
-        <div style="height:260px"><canvas id="chartDispatchers"></canvas></div>
+        <h3>👤 调度员绩效</h3>
+        <p>海事申报确认数量排名</p>
+        <div style="height:240px"><canvas id="chartDispatchers"></canvas></div>
       </div>
     </div>
 
-    <!-- 行4: 高频船舶表 + 航线详情 -->
+    <!-- 行4: 高频船舶 + 码头明细 -->
     <div class="an-chart-row">
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">🚢 高频船舶排名 (Top 15)</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">统计期内访问次数最多的船舶</p>
+        <h3>🚢 高频船舶 Top 20</h3>
+        <p>统计期内到港次数最多的船舶 · 核心客户识别</p>
         <div class="tw" style="max-height:300px;overflow-y:auto">
           <table>
-            <tr><th>#</th><th>船名</th><th>到港次数</th><th>覆盖天数</th><th>常靠码头</th></tr>
+            <tr><th>#</th><th>船名</th><th>到港</th><th>天数</th><th>常靠码头</th></tr>
             <tbody id="anFreqTable"><tr><td colspan="5" style="text-align:center;color:#94A3B8">加载中...</td></tr></tbody>
           </table>
         </div>
       </div>
       <div class="cd an-chart-box">
-        <h3 style="font-size:.9rem;font-weight:700;margin-bottom:4px">📋 调度数据汇报文本</h3>
-        <p style="color:#64748B;font-size:.7rem;margin-bottom:10px">一键导出领导层数据分析报告</p>
-        <textarea id="anReportText" readonly style="height:280px;font-family:'Consolas','Microsoft YaHei',monospace;font-size:11px;background:#F8FAFC;resize:none" placeholder="点击「导出汇报」生成报告..."></textarea>
+        <h3>🏗️ 码头作业明细</h3>
+        <p>各码头船舶数 & 海事完成率</p>
+        <div class="tw" style="max-height:300px;overflow-y:auto">
+          <table>
+            <tr><th>码头</th><th>船舶数</th><th>海事完成</th><th>完成率</th></tr>
+            <tbody id="anTermDetail"><tr><td colspan="4" style="text-align:center;color:#94A3B8">加载中...</td></tr></tbody>
+          </table>
+        </div>
       </div>
+    </div>
+
+    <!-- 行5: 导出汇报 -->
+    <div class="cd">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h3>📋 领导层汇报文本</h3>
+        <button class="btn btn-s btn-sm" onclick="exportAnalyticsReport()">📥 下载汇报</button>
+      </div>
+      <textarea id="anReportText" readonly style="height:200px;font-family:'Consolas','Microsoft YaHei',monospace;font-size:11px;background:#F8FAFC;resize:none;width:100%" placeholder="选择时间跨度后自动生成..."></textarea>
     </div>
   </div>
 </div>

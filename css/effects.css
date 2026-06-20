@@ -584,8 +584,13 @@ tr:hover td { background: #F8FAFC; }
 .an-chart-box--third{min-width:280px!important;flex:1}
 @media(max-width:900px){.an-chart-row .an-chart-box{min-width:100%}}
 
-.an-chart-box h3{font-size:.9rem;font-weight:700;color:#0F172A}
-.an-chart-box p{color:#64748B;font-size:.7rem;margin-bottom:10px}
+.an-chart-box h3{font-size:.9rem;font-weight:700;color:#0F172A;margin-bottom:2px}
+.an-chart-box p{color:#64748B;font-size:.7rem;margin-bottom:12px}
+
+/* ── 时间跨度按钮 ── */
+.an-period-btn{font-family:inherit;font-size:12px;font-weight:600;padding:5px 14px;border:none;background:transparent;color:#64748B;cursor:pointer;border-radius:6px;transition:.15s}
+.an-period-btn:hover{color:#0F172A;background:#E2E8F0}
+.an-period-btn.on{background:#2563EB;color:#fff;box-shadow:0 2px 6px rgba(37,99,235,.3)}
 
 /* 暗色背景主题（数据分析仪表板可选） */
 .an-theme-dark{background:#0F172A}
