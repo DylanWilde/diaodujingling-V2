@@ -90,17 +90,22 @@ var ANALYTICS = {
     return filtered;
   },
 
+  /* ── 去重键: 船名+进+出航次 = 唯一一次靠泊 ── */
+  _key: function(s) { return (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||''); },
+
   /* ── 1. 总览卡片 ── */
   overview: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var uniqueShips = {}, uniqueDates = {}, uniqueMonths = {};
-    var terminals = {}, maritimeDone = 0, maritimeTotal = 0;
+    var dedup = {}, nameSet = {}, dateSet = {}, monthSet = {};
+    var termCount = {}, maritimeDone = 0, maritimeTotal = 0;
     var etaDanger = 0, etaWarn = 0;
     filtered.forEach(function(s) {
-      if (s.name) uniqueShips[s.name] = true;
-      if (s.date) { uniqueDates[s.date] = true; uniqueMonths[s.date.substring(0,7)] = true; }
-      if (s.tm) terminals[s.tm] = (terminals[s.tm]||0) + 1;
+      var k = ANALYTICS._key(s);
+      if (dedup[k]) return; dedup[k] = true;  /* 去重 */
+      if (s.name) nameSet[s.name] = true;
+      if (s.date) { dateSet[s.date] = true; monthSet[s.date.substring(0,7)] = true; }
+      if (s.tm) termCount[s.tm] = (termCount[s.tm]||0) + 1;
       maritimeTotal++;
       if (s.maritime7) maritimeDone++;
       if (typeof getETAHours === 'function') {
@@ -110,16 +115,16 @@ var ANALYTICS = {
       }
     });
     return {
-      totalShips: filtered.length,
-      uniqueShips: Object.keys(uniqueShips).length,
-      activeDays: Object.keys(uniqueDates).length,
-      activeMonths: Object.keys(uniqueMonths).length,
-      activeTerminals: Object.keys(terminals).length,
+      totalShips: maritimeTotal,
+      uniqueShips: Object.keys(nameSet).length,
+      activeDays: Object.keys(dateSet).length,
+      activeMonths: Object.keys(monthSet).length,
+      activeTerminals: Object.keys(termCount).length,
       maritimeDone: maritimeDone,
       maritimeRate: maritimeTotal ? Math.round(maritimeDone/maritimeTotal*100) : 0,
       etaDanger: etaDanger,
       etaWarn: etaWarn,
-      topTerminal: Object.keys(terminals).sort(function(a,b){return terminals[b]-terminals[a];})[0] || '—'
+      topTerminal: Object.keys(termCount).sort(function(a,b){return termCount[b]-termCount[a];})[0] || '—'
     };
   },
 
@@ -127,8 +132,10 @@ var ANALYTICS = {
   terminalStats: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var terms = {};
+    var terms = {}, dedupGlobal = {};
     filtered.forEach(function(s) {
+      var k = ANALYTICS._key(s);
+      if (dedupGlobal[k]) return; dedupGlobal[k] = true;
       var tm = s.tm || '未知';
       if (!terms[tm]) terms[tm] = { total: 0, done: 0, drafts: [], names: {} };
       terms[tm].total++;
@@ -155,11 +162,12 @@ var ANALYTICS = {
   timeTrend: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var buckets = {};
-    /* 周→按天, 月→按天, 季→按月, 年→按月, 全部→按月 */
+    var buckets = {}, dedupGlobal = {};
     var isDay = (period === 'week' || period === 'month');
     filtered.forEach(function(s) {
       if (!s.date) return;
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       var key = isDay ? s.date : s.date.substring(0, 7);
       if (!buckets[key]) buckets[key] = { total: 0, done: 0 };
       buckets[key].total++;
@@ -176,8 +184,10 @@ var ANALYTICS = {
     limit = limit || 15;
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var routes = {};
+    var routes = {}, dedupGlobal = {};
     filtered.forEach(function(s) {
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       var pp = (s.pp||'—').trim(), np = (s.np||'—').trim();
       if (pp === '—' && np === '—') return;
       var key = pp + ' → ' + np;
@@ -191,8 +201,10 @@ var ANALYTICS = {
   draftDistribution: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var arr = [], dep = [];
+    var arr = [], dep = [], dedupGlobal = {};
     filtered.forEach(function(s) {
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       if (s.arV != null && s.arV > 0 && s.arV <= 18) arr.push(parseFloat(s.arV.toFixed(1)));
       if (s.drV != null && s.drV > 0 && s.drV <= 18) dep.push(parseFloat(s.drV.toFixed(1)));
     });
@@ -217,8 +229,10 @@ var ANALYTICS = {
   etaWarnings: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var s = { danger: 0, warn: 0, ok: 0, noETA: 0, expired: 0 };
+    var s = { danger: 0, warn: 0, ok: 0, noETA: 0, expired: 0 }, dedupGlobal = {};
     filtered.forEach(function(ship) {
+      var kk = ANALYTICS._key(ship);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       if (!ship.eta) { s.noETA++; return; }
       if (typeof getETAHours === 'function') {
         var h = getETAHours(ship.eta);
@@ -235,9 +249,11 @@ var ANALYTICS = {
   dispatcherStats: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var by = {};
+    var by = {}, dedupGlobal = {};
     filtered.forEach(function(s) {
       if (!s.maritime7By) return;
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       by[s.maritime7By] = (by[s.maritime7By]||0) + 1;
     });
     return Object.keys(by).map(function(k) { return { name: k, count: by[k] }; })
@@ -249,8 +265,10 @@ var ANALYTICS = {
     limit = limit || 20;
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var freq = {};
+    var freq = {}, dedupGlobal = {};
     filtered.forEach(function(s) {
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       if (!freq[s.name]) freq[s.name] = { count: 0, dates: {}, terms: {} };
       freq[s.name].count++;
       if (s.date) freq[s.name].dates[s.date] = true;
@@ -270,8 +288,10 @@ var ANALYTICS = {
   terminalDetail: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
-    var terms = {};
+    var terms = {}, dedupGlobal = {};
     filtered.forEach(function(s) {
+      var kk = ANALYTICS._key(s);
+      if (dedupGlobal[kk]) return; dedupGlobal[kk] = true;
       var tm = s.tm || '未知';
       if (!terms[tm]) terms[tm] = { total: 0, done: 0, ships: [] };
       terms[tm].total++;
