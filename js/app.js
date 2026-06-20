@@ -556,7 +556,7 @@ function checkEditPerm(date) {
   var user = getCurrentUser();
   if (!user) { alert('请先登录'); return false; }
   if (user.role === 'admin') return true;
-  var today = new Date().toISOString().split('T')[0];
+  var dNow = new Date(); var today = dNow.getFullYear() + '-' + String(dNow.getMonth()+1).padStart(2,'0') + '-' + String(dNow.getDate()).padStart(2,'0');
   if (date !== today) { alert('🔒 调度员仅可修改当日(' + today + ')数据'); return false; }
   return true;
 }
@@ -1817,7 +1817,8 @@ function setAnalyticsPeriod(period) {
   renderAnalytics();
 }
 
-var PERIOD_LABELS = { week: '周度', month: '月度', quarter: '季度', year: '年度', all: '全部历史' };
+var PERIOD_LABELS = { week: '近7天', month: '本月', quarter: '本季度', year: '本年度', all: '全部历史' };
+var PERIOD_TREND = { week: '每日', month: '每日', quarter: '每月', year: '每月', all: '每月' };
 
 async function renderAnalytics() {
   if (typeof ANALYTICS === 'undefined') return;
@@ -1830,7 +1831,7 @@ async function renderAnalytics() {
   if (labelEl) labelEl.textContent = '统计周期: ' + (PERIOD_LABELS[period] || '全部') + '分析 ｜ 船舶代理核心指标';
 
   var trendEl = document.getElementById('anTrendTitle');
-  if (trendEl) trendEl.textContent = '📈 ' + (PERIOD_LABELS[period] || '全部') + '趋势';
+  if (trendEl) trendEl.textContent = '📈 ' + (PERIOD_LABELS[period] || '全部') + '趋势(' + (PERIOD_TREND[period]||'按月') + ')';
 
   /* ── 概览卡片 ── */
   try {
@@ -1870,8 +1871,7 @@ async function renderAnalytics() {
   try {
     var ctx2 = document.getElementById('chartTrend');
     if (ctx2) {
-      var gran = period === 'week' ? 'week' : (period === 'year' ? 'month' : (period === 'quarter' ? 'month' : 'month'));
-      var trend = await ANALYTICS.timeTrend(period, gran);
+      var trend = await ANALYTICS.timeTrend(period);
       _anCharts.trend = new Chart(ctx2, {
         type: 'line',
         data: {
@@ -2046,7 +2046,7 @@ async function exportAnalyticsReport() {
     document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot syncing"></span>👀 在线数据 · 共 ' + sharedShips.length + ' 条';
   }
 
-  var today = new Date().toISOString().split('T')[0];
+  var dNow = new Date(); var today = dNow.getFullYear() + '-' + String(dNow.getMonth()+1).padStart(2,'0') + '-' + String(dNow.getDate()).padStart(2,'0');
   document.getElementById('sd').value = today;
   await opDB();
 
@@ -2108,7 +2108,7 @@ async function exportAnalyticsReport() {
   var dates = await listDates();
   if (dates.length) {
     /* 优先选今天，今天没数据则选最新日期 */
-    var today = new Date().toISOString().split('T')[0];
+    var dNow = new Date(); var today = dNow.getFullYear() + '-' + String(dNow.getMonth()+1).padStart(2,'0') + '-' + String(dNow.getDate()).padStart(2,'0');
     curDate = (dates.indexOf(today) >= 0) ? today : dates[0];
     document.getElementById('sd').value = curDate;
     var dDateEl2 = document.getElementById('dDate');
@@ -2142,7 +2142,7 @@ async function exportAnalyticsReport() {
     var sdatesList = Object.keys(sdates).sort().reverse();
     if (sdatesList.length) {
       /* 优先今天，否则最新 */
-      var today2 = new Date().toISOString().split('T')[0];
+      var dNow2 = new Date(); var today2 = dNow2.getFullYear() + '-' + String(dNow2.getMonth()+1).padStart(2,'0') + '-' + String(dNow2.getDate()).padStart(2,'0');
       curDate = (sdatesList.indexOf(today2) >= 0) ? today2 : sdatesList[0];
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
       ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });

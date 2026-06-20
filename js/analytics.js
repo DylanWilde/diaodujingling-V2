@@ -5,32 +5,31 @@
 
 var ANALYTICS = {
 
-  /* ── 获取全部数据（强制读取 IndexedDB）── */
+  /* ── 获取全部数据（IndexedDB 全量）── */
   getAllShips: function() {
     return new Promise(function(ok) {
-      /* 1. 优先从 IndexedDB 全量读取 */
+      /* 方案1: 调用 app.js 的 getAllData() 直接读 IndexedDB ships store */
       if (typeof getAllData === 'function') {
         getAllData().then(function(d) {
-          if (d && d.length) { ok(d); return; }
-          /* fallback 到 sharedShips */
-          if (typeof sharedShips !== 'undefined' && sharedShips.length) {
-            ok(sharedShips.slice());
-          } else { ok([]); }
-        }).catch(function() {
-          if (typeof sharedShips !== 'undefined' && sharedShips.length) {
-            ok(sharedShips.slice());
-          } else { ok([]); }
-        });
-      } else if (typeof sharedShips !== 'undefined' && sharedShips.length) {
-        ok(sharedShips.slice());
-      } else {
-        /* 最后尝试直接从 db 读 */
+          if (d && d.length) { console.log('[Analytics] IndexedDB: ' + d.length + ' 条'); ok(d); return; }
+          _fallback();
+        }).catch(function() { _fallback(); });
+      } else { _fallback(); }
+
+      function _fallback() {
+        /* 方案2: 共享数据 (GitHub Pages) */
+        if (typeof sharedShips !== 'undefined' && sharedShips.length) {
+          console.log('[Analytics] sharedShips: ' + sharedShips.length + ' 条');
+          ok(sharedShips.slice());
+          return;
+        }
+        /* 方案3: 直接读 db */
         try {
           if (typeof db !== 'undefined' && db) {
             var tx = db.transaction('ships', 'readonly');
             var st = tx.objectStore('ships');
             var r = st.getAll();
-            r.onsuccess = function() { ok(r.result || []); };
+            r.onsuccess = function() { console.log('[Analytics] db direct: ' + (r.result||[]).length + ' 条'); ok(r.result || []); };
             r.onerror = function() { ok([]); };
           } else { ok([]); }
         } catch(e) { ok([]); }
@@ -41,42 +40,54 @@ var ANALYTICS = {
   /* ── 时间跨度计算 ── */
   getPeriodRange: function(period) {
     var now = new Date();
-    var from = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var from;
     var label = '';
     switch (period) {
       case 'week':
-        var day = now.getDay();
-        var monday = new Date(now);
-        monday.setDate(now.getDate() - ((day + 6) % 7));
-        from = monday;
-        label = '本周 (' + this.fmtDate(monday) + ' ~ ' + this.fmtDate(now) + ')';
+        /* 7天前 ~ 今天 */
+        from = new Date(today);
+        from.setDate(today.getDate() - 7);
+        label = '近7天 (' + this.fmtDate(from) + ' ~ ' + this.fmtDate(today) + ')';
         break;
       case 'month':
-        from = new Date(now.getFullYear(), now.getMonth(), 1);
-        label = '本月 (' + (now.getMonth()+1) + '月)';
+        /* 本月1日 ~ 今天 */
+        from = new Date(today.getFullYear(), today.getMonth(), 1);
+        label = '本月 (' + (today.getMonth()+1) + '月' + today.getFullYear() + ' · ' + (today.getDate()) + '天)';
         break;
       case 'quarter':
-        var q = Math.floor(now.getMonth() / 3);
-        from = new Date(now.getFullYear(), q * 3, 1);
-        label = '本季度 (Q' + (q+1) + ' ' + now.getFullYear() + ')';
+        /* 本季度第1天 ~ 今天 */
+        var q = Math.floor(today.getMonth() / 3);
+        var qMonths = ['1-3月','4-6月','7-9月','10-12月'];
+        from = new Date(today.getFullYear(), q * 3, 1);
+        label = 'Q' + (q+1) + '季度 (' + qMonths[q] + ' ' + today.getFullYear() + ')';
         break;
       case 'year':
-        from = new Date(now.getFullYear(), 0, 1);
-        label = '本年度 (' + now.getFullYear() + ')';
+        /* 1月1日 ~ 今天 */
+        from = new Date(today.getFullYear(), 0, 1);
+        label = '年度 (' + today.getFullYear() + '年 · YTD)';
         break;
       default:
         label = '全部历史数据';
     }
-    return { from: from.toISOString().split('T')[0], label: label };
+    var fromStr = from ? this.fmtDate(from) : '';
+    return { from: fromStr, to: this.fmtDate(today), label: label };
   },
 
-  fmtDate: function(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); },
+  fmtDate: function(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  },
 
-  /* ── 按时间跨度过滤 ── */
+  /* ── 按时间跨度过滤（包含边界）── */
   filterByPeriod: function(data, period) {
-    if (!period || period === 'all') return data;
+    if (!period || period === 'all') return data.slice();
     var range = this.getPeriodRange(period);
-    return data.filter(function(s) { return s.date >= range.from; });
+    var from = range.from, to = range.to;
+    var filtered = data.filter(function(s) {
+      return s.date >= from && s.date <= to;
+    });
+    console.log('[Analytics] filter ' + period + ': ' + filtered.length + ' / ' + data.length + ' total (range ' + from + ' ~ ' + to + ')');
+    return filtered;
   },
 
   /* ── 1. 总览卡片 ── */
@@ -140,39 +151,23 @@ var ANALYTICS = {
     }).sort(function(a,b){ return b.vessels - a.vessels; });
   },
 
-  /* ── 3. 时间趋势 (周/月/季) ── */
-  timeTrend: async function(period, granularity) {
+  /* ── 3. 时间趋势 ── */
+  timeTrend: async function(period) {
     var data = await this.getAllShips();
     var filtered = this.filterByPeriod(data, period);
     var buckets = {};
+    /* 周→按天, 月→按天, 季→按月, 年→按月, 全部→按月 */
+    var isDay = (period === 'week' || period === 'month');
     filtered.forEach(function(s) {
       if (!s.date) return;
-      var key;
-      if (granularity === 'week') {
-        var d = new Date(s.date);
-        var day = d.getDay();
-        var monday = new Date(d);
-        monday.setDate(d.getDate() - ((day + 6) % 7));
-        key = monday.toISOString().split('T')[0];
-      } else if (granularity === 'month') {
-        key = s.date.substring(0, 7);
-      } else if (granularity === 'quarter') {
-        var d2 = new Date(s.date);
-        var q = Math.floor(d2.getMonth() / 3);
-        key = d2.getFullYear() + '-Q' + (q+1);
-      } else {
-        key = s.date.substring(0, 4);
-      }
+      var key = isDay ? s.date : s.date.substring(0, 7);
       if (!buckets[key]) buckets[key] = { total: 0, done: 0 };
       buckets[key].total++;
       if (s.maritime7) buckets[key].done++;
     });
     return Object.keys(buckets).sort().map(function(k) {
       var b = buckets[k];
-      return {
-        key: k, total: b.total, done: b.done,
-        rate: b.total ? Math.round(b.done/b.total*100) : 0
-      };
+      return { key: k, total: b.total, done: b.done, rate: b.total ? Math.round(b.done/b.total*100) : 0 };
     });
   },
 
@@ -295,14 +290,13 @@ var ANALYTICS = {
   /* ── 10. 日报快照 ── */
   dailySnapshot: async function() {
     var now = new Date();
-    var today = now.toISOString().split('T')[0];
+    var today = this.fmtDate(now);
     var data = await this.getAllShips();
     var ships = data.filter(function(s) { return s.date === today; });
     if (!ships.length) {
-      var yesterday = new Date(now); yesterday.setDate(yesterday.getDate()-1);
-      var yd = yesterday.toISOString().split('T')[0];
-      ships = data.filter(function(s) { return s.date === yd; });
-      today = yd;
+      now.setDate(now.getDate() - 1);
+      today = this.fmtDate(now);
+      ships = data.filter(function(s) { return s.date === today; });
     }
     var done = ships.filter(function(s){return s.maritime7;}).length;
     var eta24 = 0, eta48 = 0;
