@@ -1800,6 +1800,7 @@ function exportMonthRows(m, allData) {
 
 /* ═══ 数据分析渲染 ═══ */
 var _anCharts = {};
+var _anPeriod = 'month';
 
 function destroyAnalyticsCharts() {
   for (var k in _anCharts) {
@@ -1807,238 +1808,213 @@ function destroyAnalyticsCharts() {
   }
 }
 
+function setAnalyticsPeriod(period) {
+  _anPeriod = period;
+  ['week','month','quarter','year','all'].forEach(function(p) {
+    var btn = document.getElementById('anBtn' + p.charAt(0).toUpperCase() + p.slice(1));
+    if (btn) btn.classList.toggle('on', p === period);
+  });
+  renderAnalytics();
+}
+
+var PERIOD_LABELS = { week: '周度', month: '月度', quarter: '季度', year: '年度', all: '全部历史' };
+
 async function renderAnalytics() {
-  if (typeof ANALYTICS === 'undefined') {
-    document.getElementById('anOverview').innerHTML = '<div class="st st-err">数据分析引擎未加载，请刷新页面</div>';
-    return;
-  }
+  if (typeof ANALYTICS === 'undefined') return;
   destroyAnalyticsCharts();
 
-  var range = document.getElementById('anDateRange');
-  var rangeVal = range ? range.value : 'all';
+  var period = _anPeriod || 'month';
 
-  /* 获取数据 */
-  var allData = (typeof isViewerMode !== 'undefined' && isViewerMode)
-    ? (typeof sharedShips !== 'undefined' ? sharedShips : [])
-    : await (typeof getAllData === 'function' ? getAllData() : Promise.resolve([]));
+  /* 更新标题 */
+  var labelEl = document.getElementById('anPeriodLabel');
+  if (labelEl) labelEl.textContent = '统计周期: ' + (PERIOD_LABELS[period] || '全部') + '分析 ｜ 船舶代理核心指标';
 
-  var filtered = allData;
-  if (rangeVal !== 'all') {
-    var now = new Date();
-    var cutoff = new Date();
-    if (rangeVal === '7d') cutoff.setDate(now.getDate() - 7);
-    else if (rangeVal === '30d') cutoff.setDate(now.getDate() - 30);
-    else if (rangeVal === '3m') cutoff.setMonth(now.getMonth() - 3);
-    else if (rangeVal === '6m') cutoff.setMonth(now.getMonth() - 6);
-    else if (rangeVal === '1y') cutoff.setFullYear(now.getFullYear() - 1);
-    var cutoffStr = cutoff.toISOString().split('T')[0];
-    filtered = allData.filter(function(s) { return s.date >= cutoffStr; });
-  }
-  var data = filtered;
+  var trendEl = document.getElementById('anTrendTitle');
+  if (trendEl) trendEl.textContent = '📈 ' + (PERIOD_LABELS[period] || '全部') + '趋势';
 
-  /* 概览数字 */
-  var uniqueShips = {};
-  var dates = {}, months = {};
-  var maritimeDone = 0, maritimeTotal = 0;
-  var terminals = {};
-  data.forEach(function(s) {
-    if (s.name) uniqueShips[s.name] = true;
-    if (s.date) { dates[s.date] = true; months[s.date.substring(0,7)] = true; }
-    if (s.tm) terminals[s.tm] = true;
-    maritimeTotal++;
-    if (s.maritime7) maritimeDone++;
-  });
-  document.getElementById('anTotalShips').textContent = data.length;
-  document.getElementById('anTotalDates').textContent = Object.keys(dates).length;
-  document.getElementById('anTotalMonths').textContent = Object.keys(months).length;
-  document.getElementById('anMaritimeRate').textContent = (maritimeTotal ? (maritimeDone/maritimeTotal*100).toFixed(0) : 0) + '%';
-  document.getElementById('anActiveTerms').textContent = Object.keys(terminals).length;
-  document.getElementById('anUniqueShips').textContent = Object.keys(uniqueShips).length;
+  /* ── 概览卡片 ── */
+  try {
+    var ov = await ANALYTICS.overview(period);
+    document.getElementById('anTotalShips').textContent = ov.totalShips;
+    document.getElementById('anUniqueShips').textContent = ov.uniqueShips;
+    document.getElementById('anActiveDays').textContent = ov.activeDays;
+    document.getElementById('anMaritimeRate').textContent = ov.maritimeRate + '%';
+    document.getElementById('anActiveTerms').textContent = ov.activeTerminals;
+    document.getElementById('anEtaDanger').textContent = ov.etaDanger;
+  } catch(e) {}
 
-  /* ── Chart 1: 码头柱状图 ── */
-  var termStats = await ANALYTICS.terminalStats();
-  /* 使用过滤后的数据重新计算 */
-  var termMap = {};
-  data.forEach(function(s) {
-    var tm = s.tm || '未知';
-    if (!termMap[tm]) termMap[tm] = { count: 0, done: 0 };
-    termMap[tm].count++;
-    if (s.maritime7) termMap[tm].done++;
-  });
-  var termLabels = Object.keys(termMap).sort(function(a,b){ return termMap[b].count - termMap[a].count; });
+  /* ── Chart 1: 码头作业量 ── */
   try {
     var ctx1 = document.getElementById('chartTerminals');
     if (ctx1) {
+      var tms = await ANALYTICS.terminalStats(period);
       _anCharts.terminals = new Chart(ctx1, {
         type: 'bar',
         data: {
-          labels: termLabels,
+          labels: tms.map(function(t){return t.terminal;}),
           datasets: [
-            { label: '船舶数量', data: termLabels.map(function(k){return termMap[k].count;}), backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 6, order: 2 },
-            { label: '海事已申报', data: termLabels.map(function(k){return termMap[k].done;}), backgroundColor: 'rgba(16,185,129,.7)', borderRadius: 6, order: 1 }
-          ]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } } }, scales: { x: { ticks: { maxRotation: 45 } }, y: { beginAtZero: true, title: { display: true, text: '艘' } } } }
-      });
-    }
-  } catch(e) { console.log('chart1 error:', e); }
-
-  /* ── Chart 2: 月度趋势 ── */
-  try {
-    var ctx2 = document.getElementById('chartMonthly');
-    if (ctx2) {
-      var monthTrend = await ANALYTICS.monthlyTrend();
-      /* 按range过滤 */
-      if (rangeVal !== 'all' && cutoffStr) {
-        monthTrend = monthTrend.filter(function(m) { return m.month >= cutoffStr.substring(0,7); });
-      }
-      _anCharts.monthly = new Chart(ctx2, {
-        type: 'line',
-        data: {
-          labels: monthTrend.map(function(m){ return m.month; }),
-          datasets: [
-            { label: '船舶数', data: monthTrend.map(function(m){return m.total;}), borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,.08)', fill: true, tension: .4, pointRadius: 4, pointBackgroundColor: '#2563EB' },
-            { label: '海事完成率%', data: monthTrend.map(function(m){return parseInt(m.maritimeRate)||0;}), borderColor: '#10B981', borderDash: [5,5], tension: .4, pointRadius: 3, pointBackgroundColor: '#10B981', yAxisID: 'y1' }
+            { label: '船舶数', data: tms.map(function(t){return t.vessels;}), backgroundColor: 'rgba(37,99,235,.72)', borderRadius: 6, order: 2 },
+            { label: '海事已报', data: tms.map(function(t){return t.maritimeDone;}), backgroundColor: 'rgba(16,185,129,.72)', borderRadius: 6, order: 1 }
           ]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } } },
+          plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 16, font: { size: 11 } } } },
+          scales: { x: { ticks: { maxRotation: 45, font: { size: 10 } } }, y: { beginAtZero: true, title: { display: true, text: '艘', font: { size: 11 } } } }
+        }
+      });
+    }
+  } catch(e) {}
+
+  /* ── Chart 2: 时间趋势 ── */
+  try {
+    var ctx2 = document.getElementById('chartTrend');
+    if (ctx2) {
+      var gran = period === 'week' ? 'week' : (period === 'year' ? 'month' : (period === 'quarter' ? 'month' : 'month'));
+      var trend = await ANALYTICS.timeTrend(period, gran);
+      _anCharts.trend = new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: trend.map(function(t){return t.key;}),
+          datasets: [
+            { label: '船舶数', data: trend.map(function(t){return t.total;}), borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,.06)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#2563EB', borderWidth: 2 },
+            { label: '申报率%', data: trend.map(function(t){return t.rate;}), borderColor: '#10B981', borderDash: [6,3], tension: .35, pointRadius: 2, pointBackgroundColor: '#10B981', yAxisID: 'y1', borderWidth: 1.5 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 16, font: { size: 11 } } } },
           scales: {
-            y: { beginAtZero: true, title: { display: true, text: '艘' } },
-            y1: { position: 'right', beginAtZero: true, max: 100, title: { display: true, text: '%' }, grid: { drawOnChartArea: false }, ticks: { callback: function(v){return v+'%';} } }
+            y: { beginAtZero: true, title: { display: true, text: '艘', font: { size: 11 } } },
+            y1: { position: 'right', beginAtZero: true, max: 100, title: { display: true, text: '%', font: { size: 11 } }, grid: { drawOnChartArea: false }, ticks: { callback: function(v){return v+'%';} } }
           }
         }
       });
     }
-  } catch(e) { console.log('chart2 error:', e); }
+  } catch(e) {}
 
-  /* ── Chart 3: 航线水平柱状图 ── */
+  /* ── Chart 3: 航线流量 ── */
   try {
     var ctx3 = document.getElementById('chartRoutes');
     if (ctx3) {
-      var routeData = await ANALYTICS.routeFlow();
-      /* 使用过滤数据 */
-      var routeMap2 = {};
-      data.forEach(function(s) {
-        var pp = (s.pp||'—').trim(), np = (s.np||'—').trim();
-        if (pp === '—' && np === '—') return;
-        var k = pp + ' → ' + np;
-        routeMap2[k] = (routeMap2[k]||0) + 1;
-      });
-      var routeSorted = Object.keys(routeMap2).map(function(k){return {r:k,c:routeMap2[k]};}).sort(function(a,b){return b.c-a.c;}).slice(0,15);
+      var routes = await ANALYTICS.routeFlow(period, 15);
       _anCharts.routes = new Chart(ctx3, {
         type: 'bar',
         data: {
-          labels: routeSorted.map(function(r){return r.r;}),
-          datasets: [{ label: '航次', data: routeSorted.map(function(r){return r.c;}), backgroundColor: routeSorted.map(function(_,i){var a=.4+.6*(1-i/15);return 'rgba(124,58,237,'+a.toFixed(2)+')';}), borderRadius: 4 }]
+          labels: routes.map(function(r){return r.route;}),
+          datasets: [{ label: '航次', data: routes.map(function(r){return r.count;}), backgroundColor: routes.map(function(_,i){ return 'rgba(124,58,237,' + (0.3+0.7*(1-i/routes.length)) + ')'; }), borderRadius: 4 }]
         },
-        options: {
-          indexAxis: 'y',
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: { x: { beginAtZero: true, title: { display: true, text: '航次数' } } }
-        }
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, title: { display: true, text: '航次数' } } } }
       });
     }
-  } catch(e) { console.log('chart3 error:', e); }
+  } catch(e) {}
 
-  /* ── Chart 4: 吃水直方图 ── */
+  /* ── Chart 4: 吃水分布 ── */
   try {
     var ctx4 = document.getElementById('chartDraft');
     if (ctx4) {
-      var draftData = await ANALYTICS.draftDistribution();
-      var labels4 = draftData.arrival.map(function(d){return d.range;});
+      var drafts = await ANALYTICS.draftDistribution(period);
+      var labels4 = drafts.arrival.map(function(d){return d.range;});
       _anCharts.draft = new Chart(ctx4, {
         type: 'bar',
         data: {
           labels: labels4,
           datasets: [
-            { label: '抵港吃水', data: draftData.arrival.map(function(d){return d.count;}), backgroundColor: 'rgba(37,99,235,.6)', borderRadius: 2 },
-            { label: '离港吃水', data: draftData.departure.map(function(d){return d.count;}), backgroundColor: 'rgba(239,68,68,.5)', borderRadius: 2 }
+            { label: '抵港吃水', data: drafts.arrival.map(function(d){return d.count;}), backgroundColor: 'rgba(37,99,235,.55)', borderRadius: 2 },
+            { label: '离港吃水', data: drafts.departure.map(function(d){return d.count;}), backgroundColor: 'rgba(239,68,68,.45)', borderRadius: 2 }
           ]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'top', labels: { usePointStyle: true } } },
-          scales: { x: { ticks: { maxRotation: 90, font: { size: 9 }, maxTicksLimit: 20 } }, y: { beginAtZero: true, title: { display: true, text: '艘次' } } }
+          plugins: { legend: { position: 'top', labels: { usePointStyle: true, font: { size: 10 } } } },
+          scales: { x: { ticks: { maxRotation: 90, font: { size: 8 }, maxTicksLimit: 18 } }, y: { beginAtZero: true, title: { display: true, text: '艘次' } } }
         }
       });
     }
-  } catch(e) { console.log('chart4 error:', e); }
+  } catch(e) {}
 
-  /* ── Chart 5: ETA 饼图 ── */
+  /* ── Chart 5: ETA预警 ── */
   try {
     var ctx5 = document.getElementById('chartETA');
     if (ctx5) {
-      var etaStats = await ANALYTICS.etaWarnings();
+      var eta = await ANALYTICS.etaWarnings(period);
       _anCharts.eta = new Chart(ctx5, {
         type: 'doughnut',
         data: {
-          labels: ['24h内紧急','48h内关注','正常','无ETA','已过期'],
-          datasets: [{ data: [etaStats.danger, etaStats.warn, etaStats.ok, etaStats.noETA, etaStats.expired], backgroundColor: ['#EF4444','#F59E0B','#10B981','#94A3B8','#6B7280'], borderWidth: 2, borderColor: '#fff' }]
+          labels: ['24h紧急','48h关注','正常','无ETA','已过期'],
+          datasets: [{ data: [eta.danger, eta.warn, eta.ok, eta.noETA, eta.expired], backgroundColor: ['#EF4444','#F59E0B','#10B981','#94A3B8','#6B7280'], borderWidth: 2, borderColor: '#fff' }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 10 } } } } }
       });
     }
-  } catch(e) { console.log('chart5 error:', e); }
+  } catch(e) {}
 
-  /* ── Chart 6: 海事申报进度仪表 ── */
+  /* ── Chart 6: 海事进度 ── */
   try {
     var ctx6 = document.getElementById('chartMaritime');
     if (ctx6) {
-      var marData = await ANALYTICS.maritimeCompletion();
+      var ov2 = await ANALYTICS.overview(period);
+      var done = ov2.maritimeDone, pending = ov2.totalShips - ov2.maritimeDone;
       _anCharts.maritime = new Chart(ctx6, {
         type: 'doughnut',
         data: {
-          labels: ['已完成','未完成'],
-          datasets: [{ data: [marData.overview.done, marData.overview.total - marData.overview.done], backgroundColor: ['#10B981','#E5E7EB'], borderWidth: 2, borderColor: '#fff' }]
+          labels: ['已完成 ' + done + '艘', '待完成 ' + pending + '艘'],
+          datasets: [{ data: [done, pending], backgroundColor: ['#10B981','#E5E7EB'], borderWidth: 2, borderColor: '#fff' }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
-            tooltip: { callbacks: { label: function(c){return c.label+': '+c.raw+' 艘 ('+(c.raw/marData.overview.total*100).toFixed(0)+'%)';} } }
+            legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 10 } } },
+            tooltip: { callbacks: { label: function(c){ return c.label; } } }
           }
         }
       });
     }
-  } catch(e) { console.log('chart6 error:', e); }
+  } catch(e) {}
 
-  /* ── Chart 7: 调度员确认 ── */
+  /* ── Chart 7: 调度员绩效 ── */
   try {
     var ctx7 = document.getElementById('chartDispatchers');
     if (ctx7) {
-      var marData2 = await ANALYTICS.maritimeCompletion();
-      var persons = Object.keys(marData2.byPerson).sort(function(a,b){ return marData2.byPerson[b] - marData2.byPerson[a]; });
+      var disp = await ANALYTICS.dispatcherStats(period);
       _anCharts.dispatchers = new Chart(ctx7, {
         type: 'bar',
         data: {
-          labels: persons,
-          datasets: [{ label: '确认数量', data: persons.map(function(p){return marData2.byPerson[p];}), backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 6 }]
+          labels: disp.map(function(d){return d.name;}),
+          datasets: [{ label: '确认数量', data: disp.map(function(d){return d.count;}), backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 6 }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false } },
-          scales: { x: { ticks: { maxRotation: 45 } }, y: { beginAtZero: true, title: { display: true, text: '艘' }, ticks: { stepSize: 1 } } }
+          scales: { x: { ticks: { maxRotation: 0, font: { size: 11 } } }, y: { beginAtZero: true, title: { display: true, text: '艘' }, ticks: { stepSize: 1 } } }
         }
       });
     }
-  } catch(e) { console.log('chart7 error:', e); }
+  } catch(e) {}
 
   /* ── 高频船舶表 ── */
   try {
-    var freq = await ANALYTICS.frequentVessels(15);
-    var freqHtml = '';
+    var freq = await ANALYTICS.frequentVessels(period, 20);
+    var fh = '';
     freq.forEach(function(v, i) {
-      freqHtml += '<tr><td>' + (i+1) + '</td><td style="font-weight:700">' + esc(v.name) + '</td><td>' + v.visits + '</td><td>' + v.dateCount + '</td><td>' + esc(v.terminals) + '</td></tr>';
+      fh += '<tr><td>' + (i+1) + '</td><td style="font-weight:700">' + esc(v.name) + '</td><td>' + v.visits + '</td><td>' + v.dateCount + '</td><td>' + esc(v.terminals) + '</td></tr>';
     });
-    document.getElementById('anFreqTable').innerHTML = freqHtml || '<tr><td colspan="5" style="text-align:center;color:#94A3B8">暂无数据</td></tr>';
+    document.getElementById('anFreqTable').innerHTML = fh || '<tr><td colspan="5" style="text-align:center;color:#94A3B8">暂无数据</td></tr>';
   } catch(e) {}
 
-  /* ── 更新汇报文本框 ── */
+  /* ── 码头明细表 ── */
   try {
-    var report = await ANALYTICS.generateReport();
+    var tmd = await ANALYTICS.terminalDetail(period);
+    var th = '';
+    tmd.forEach(function(t) {
+      th += '<tr><td style="font-weight:700">' + esc(t.terminal) + '</td><td>' + t.total + '</td><td>' + t.done + '</td><td>' + t.rate + '%</td></tr>';
+    });
+    document.getElementById('anTermDetail').innerHTML = th || '<tr><td colspan="4" style="text-align:center;color:#94A3B8">暂无数据</td></tr>';
+  } catch(e) {}
+
+  /* ── 汇报文本 ── */
+  try {
+    var report = await ANALYTICS.generateReport(period);
     var ta = document.getElementById('anReportText');
     if (ta) ta.value = report;
   } catch(e) {}
@@ -2046,7 +2022,7 @@ async function renderAnalytics() {
 
 async function exportAnalyticsReport() {
   try {
-    var report = await ANALYTICS.generateReport();
+    var report = await ANALYTICS.generateReport(_anPeriod || 'all');
     var blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
