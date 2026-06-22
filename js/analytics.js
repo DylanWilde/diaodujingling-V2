@@ -12,7 +12,7 @@ var ANALYTICS = {
         var localRows = [], sharedRows = [];
 
         function dedupKey(s) {
-          return (s.date||'') + '|' + (s.name||'');
+          return (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'');
         }
 
         function normalize(rows) {
@@ -139,9 +139,9 @@ var ANALYTICS = {
     return result;
   },
 
-  /* ── 航次去重键（每船每天 = 1航次）── */
+  /* ── 航次去重键（船名+航次=1代理航次，跨天重复报船期去重）── */
   vKey: function(s) {
-    return (s.date||'') + '|' + (s.name||'');
+    return (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'');
   },
 
   /* ── 1. 总览 ── */
