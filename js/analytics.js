@@ -5,44 +5,74 @@
 
 var ANALYTICS = {
 
-  /* ── 读取全部数据 ── */
+  /* ── 读取全部数据（合并 IndexedDB + sharedShips）── */
   getAllShips: function() {
-    var self = this;
     return new Promise(function(ok) {
-      /* 直接读 IndexedDB ships store */
       try {
+        var localRows = [], sharedRows = [];
+
+        function dedupKey(s) {
+          return (s.date||'') + '|' + (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'');
+        }
+
+        function normalize(rows) {
+          rows.forEach(function(s) {
+            s.eta = s.eta || '';
+            s.maritime7 = !!s.maritime7;
+            s.maritime7Note = s.maritime7Note || '';
+            s.maritime7By = s.maritime7By || '';
+          });
+        }
+
+        function merge() {
+          var map = {};
+          sharedRows.forEach(function(s) { map[dedupKey(s)] = s; });
+          localRows.forEach(function(s) { map[dedupKey(s)] = s; });
+          var merged = Object.values(map);
+          console.log('[Analytics] Merged: ' + localRows.length + ' local + ' + sharedRows.length + ' shared = ' + merged.length + ' total rows');
+          if (merged.length) {
+            var dates = {}; merged.forEach(function(s){ if(s.date) dates[s.date]=true; });
+            console.log('[Analytics] Date range: ' + Object.keys(dates).sort().slice(0,3).join(', ') + '... (' + Object.keys(dates).length + ' dates)');
+          }
+          ok(merged);
+        }
+
+        function loadShared() {
+          if (typeof sharedShips !== 'undefined' && sharedShips.length) {
+            sharedRows = sharedShips.slice();
+            normalize(sharedRows);
+          }
+        }
+
+        function doneLocal() {
+          loadShared();
+          merge();
+        }
+
         if (typeof db !== 'undefined' && db) {
           var tx = db.transaction('ships', 'readonly');
           var st = tx.objectStore('ships');
           var r = st.getAll();
           r.onsuccess = function() {
-            var rows = r.result || [];
-            /* normalize: expand short fields */
-            rows.forEach(function(s) {
-              s.eta = s.eta || '';
-              s.maritime7 = !!s.maritime7;
-              s.maritime7Note = s.maritime7Note || '';
-              s.maritime7By = s.maritime7By || '';
-            });
-            console.log('[Analytics] IndexedDB ships: ' + rows.length + ' rows');
-            if (rows.length) {
-              var dates = {}; rows.forEach(function(s){ if(s.date) dates[s.date]=true; });
-              console.log('[Analytics] Date range: ' + Object.keys(dates).sort().slice(0,3).join(', ') + '... (' + Object.keys(dates).length + ' dates)');
-            }
-            ok(rows);
+            localRows = r.result || [];
+            normalize(localRows);
+            doneLocal();
           };
-          r.onerror = function() { console.log('[Analytics] DB read error'); ok([]); };
-        } else if (typeof sharedShips !== 'undefined' && sharedShips.length) {
-          console.log('[Analytics] sharedShips: ' + sharedShips.length + ' rows');
-          ok(sharedShips.slice());
-        } else if (typeof getAllData === 'function') {
-          getAllData().then(function(d) {
-            console.log('[Analytics] getAllData(): ' + (d||[]).length + ' rows');
-            ok(d || []);
-          });
+          r.onerror = function() {
+            console.log('[Analytics] DB read error, using shared only');
+            doneLocal();
+          };
         } else {
-          console.log('[Analytics] No data source available');
-          ok([]);
+          loadShared();
+          if (!sharedRows.length && typeof getAllData === 'function') {
+            getAllData().then(function(d) {
+              localRows = d || [];
+              normalize(localRows);
+              merge();
+            });
+            return;
+          }
+          merge();
         }
       } catch(e) {
         console.log('[Analytics] Error:', e.message);
