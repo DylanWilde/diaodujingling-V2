@@ -1836,8 +1836,7 @@ async function renderAnalytics() {
   /* ── 概览卡片 ── */
   try {
     var ov = await ANALYTICS.overview(period);
-    document.getElementById('anTotalShips').textContent = ov.totalShips;
-    document.getElementById('anUniqueShips').textContent = ov.uniqueShips;
+    document.getElementById('anVoyageCount').textContent = ov.voyageCount;
     document.getElementById('anActiveDays').textContent = ov.activeDays;
     document.getElementById('anMaritimeRate').textContent = ov.maritimeRate + '%';
     document.getElementById('anActiveTerms').textContent = ov.activeTerminals;
@@ -1945,49 +1944,6 @@ async function renderAnalytics() {
           datasets: [{ data: [eta.danger, eta.warn, eta.ok, eta.noETA, eta.expired], backgroundColor: ['#EF4444','#F59E0B','#10B981','#94A3B8','#6B7280'], borderWidth: 2, borderColor: '#fff' }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 10 } } } } }
-      });
-    }
-  } catch(e) {}
-
-  /* ── Chart 6: 海事进度 ── */
-  try {
-    var ctx6 = document.getElementById('chartMaritime');
-    if (ctx6) {
-      var ov2 = await ANALYTICS.overview(period);
-      var done = ov2.maritimeDone, pending = ov2.totalShips - ov2.maritimeDone;
-      _anCharts.maritime = new Chart(ctx6, {
-        type: 'doughnut',
-        data: {
-          labels: ['已完成 ' + done + '艘', '待完成 ' + pending + '艘'],
-          datasets: [{ data: [done, pending], backgroundColor: ['#10B981','#E5E7EB'], borderWidth: 2, borderColor: '#fff' }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 10 } } },
-            tooltip: { callbacks: { label: function(c){ return c.label; } } }
-          }
-        }
-      });
-    }
-  } catch(e) {}
-
-  /* ── Chart 7: 调度员绩效 ── */
-  try {
-    var ctx7 = document.getElementById('chartDispatchers');
-    if (ctx7) {
-      var disp = await ANALYTICS.dispatcherStats(period);
-      _anCharts.dispatchers = new Chart(ctx7, {
-        type: 'bar',
-        data: {
-          labels: disp.map(function(d){return d.name;}),
-          datasets: [{ label: '确认数量', data: disp.map(function(d){return d.count;}), backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 6 }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: { x: { ticks: { maxRotation: 0, font: { size: 11 } } }, y: { beginAtZero: true, title: { display: true, text: '艘' }, ticks: { stepSize: 1 } } }
-        }
       });
     }
   } catch(e) {}
