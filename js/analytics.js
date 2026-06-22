@@ -12,7 +12,7 @@ var ANALYTICS = {
         var localRows = [], sharedRows = [];
 
         function dedupKey(s) {
-          return (s.date||'') + '|' + (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'');
+          return (s.date||'') + '|' + (s.name||'');
         }
 
         function normalize(rows) {
@@ -92,35 +92,38 @@ var ANALYTICS = {
     return new Date(+p[0], +p[1]-1, +p[2]);
   },
 
-  /* ── 时间跨度 ── */
+  /* ── 时间跨度（支持 week / month-N / quarter-N / year-NNNN / all）── */
   getPeriodRange: function(period) {
     var now = new Date();
     var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    var from = null, label = '';
-    switch (period) {
-      case 'week':
-        from = new Date(today); from.setDate(today.getDate() - 7);
-        label = '近7天 ' + this.fmtDate(from) + ' ~ ' + this.fmtDate(today);
-        break;
-      case 'month':
-        from = new Date(today.getFullYear(), today.getMonth(), 1);
-        label = today.getFullYear() + '年' + (today.getMonth()+1) + '月';
-        break;
-      case 'quarter':
-        var q = Math.floor(today.getMonth() / 3);
-        var qm = ['1-3月','4-6月','7-9月','10-12月'];
-        from = new Date(today.getFullYear(), q * 3, 1);
-        label = today.getFullYear() + '年 Q' + (q+1) + '(' + qm[q] + ')';
-        break;
-      case 'year':
-        from = new Date(today.getFullYear(), 0, 1);
-        label = today.getFullYear() + '年 (YTD)';
-        break;
-      default:
-        label = '全部历史';
+    var from = null, to = null, label = '';
+
+    if (period === 'week') {
+      from = new Date(today); from.setDate(today.getDate() - 7);
+      to = today;
+      label = '近7天 ' + this.fmtDate(from) + ' ~ ' + this.fmtDate(today);
+    } else if (period && period.indexOf('month-') === 0) {
+      var m = parseInt(period.split('-')[1]);
+      var y = today.getFullYear();
+      from = new Date(y, m - 1, 1);
+      to = new Date(y, m, 0);
+      label = y + '年' + m + '月';
+    } else if (period && period.indexOf('quarter-') === 0) {
+      var q = parseInt(period.split('-')[1]);
+      var y2 = today.getFullYear();
+      from = new Date(y2, (q - 1) * 3, 1);
+      to = new Date(y2, q * 3, 0);
+      label = y2 + '年 Q' + q + ' (' + ['1-3月','4-6月','7-9月','10-12月'][q-1] + ')';
+    } else if (period && period.indexOf('year-') === 0) {
+      var y3 = parseInt(period.split('-')[1]);
+      from = new Date(y3, 0, 1);
+      to = new Date(y3, 11, 31);
+      label = y3 + '年度';
+    } else {
+      label = '全部历史';
     }
     var fromStr = from ? this.fmtDate(from) : null;
-    var toStr = this.fmtDate(today);
+    var toStr = this.fmtDate(to) || this.fmtDate(today);
     return { from: fromStr, to: toStr, label: label };
   },
 
@@ -136,9 +139,9 @@ var ANALYTICS = {
     return result;
   },
 
-  /* ── 航次去重键 ── */
+  /* ── 航次去重键（每船每天 = 1航次）── */
   vKey: function(s) {
-    return (s.date||'') + '|' + (s.name||'') + '|' + (s.iv||'') + '|' + (s.ev||'');
+    return (s.date||'') + '|' + (s.name||'');
   },
 
   /* ── 1. 总览 ── */
@@ -199,7 +202,7 @@ var ANALYTICS = {
     var self = this;
     var data = await this.getAllShips();
     var rows = this.filterByPeriod(data, period);
-    var isDay = (period === 'week' || period === 'month');
+    var isDay = (period === 'week' || (period && period.indexOf('month-') === 0));
     var b = {};
     rows.forEach(function(s) {
       if (!s.date) return;

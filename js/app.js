@@ -1800,7 +1800,8 @@ function exportMonthRows(m, allData) {
 
 /* ═══ 数据分析渲染 ═══ */
 var _anCharts = {};
-var _anPeriod = 'month';
+var _anPeriodType = 'week';
+var _anPeriodValue = '';
 
 function destroyAnalyticsCharts() {
   for (var k in _anCharts) {
@@ -1808,30 +1809,64 @@ function destroyAnalyticsCharts() {
   }
 }
 
+function buildPeriodKey() {
+  if (_anPeriodType === 'month') return 'month-' + (_anPeriodValue || (new Date().getMonth()+1));
+  if (_anPeriodType === 'quarter') return 'quarter-' + (_anPeriodValue || (Math.floor(new Date().getMonth()/3)+1));
+  if (_anPeriodType === 'year') return 'year-' + (_anPeriodValue || new Date().getFullYear());
+  return _anPeriodType;
+}
+
 function setAnalyticsPeriod(period) {
-  _anPeriod = period;
+  _anPeriodType = period;
   ['week','month','quarter','year','all'].forEach(function(p) {
     var btn = document.getElementById('anBtn' + p.charAt(0).toUpperCase() + p.slice(1));
     if (btn) btn.classList.toggle('on', p === period);
   });
+  /* 填充并显示/隐藏值选择器 */
+  var sel = document.getElementById('anPeriodValue');
+  if (!sel) { renderAnalytics(); return; }
+  sel.style.display = 'none';
+  var now = new Date();
+  if (period === 'month') {
+    var m = now.getMonth()+1;
+    sel.innerHTML = '';
+    for (var i = 1; i <= 12; i++) { sel.innerHTML += '<option value="' + i + '"' + (i===m?' selected':'') + '>' + i + '月</option>'; }
+    sel.style.display = '';
+    _anPeriodValue = String(m);
+  } else if (period === 'quarter') {
+    var q = Math.floor(now.getMonth()/3)+1;
+    sel.innerHTML = '<option value="1"' + (1===q?' selected':'') + '>Q1 · 1-3月</option><option value="2"' + (2===q?' selected':'') + '>Q2 · 4-6月</option><option value="3"' + (3===q?' selected':'') + '>Q3 · 7-9月</option><option value="4"' + (4===q?' selected':'') + '>Q4 · 10-12月</option>';
+    sel.style.display = '';
+    _anPeriodValue = String(q);
+  } else if (period === 'year') {
+    var y = now.getFullYear();
+    sel.innerHTML = '';
+    for (var j = 0; j < 3; j++) { var yr = 2026 + j; sel.innerHTML += '<option value="' + yr + '"' + (yr===y?' selected':'') + '>' + yr + '年</option>'; }
+    sel.style.display = '';
+    _anPeriodValue = String(y > 2028 ? 2028 : (y < 2026 ? 2026 : y));
+  }
   renderAnalytics();
 }
 
-var PERIOD_LABELS = { week: '近7天', month: '本月', quarter: '本季度', year: '本年度', all: '全部历史' };
-var PERIOD_TREND = { week: '每日', month: '每日', quarter: '每月', year: '每月', all: '每月' };
+function onPeriodValueChange() {
+  var sel = document.getElementById('anPeriodValue');
+  if (sel) { _anPeriodValue = sel.value; renderAnalytics(); }
+}
 
 async function renderAnalytics() {
   if (typeof ANALYTICS === 'undefined') return;
   destroyAnalyticsCharts();
 
-  var period = _anPeriod || 'month';
+  var period = buildPeriodKey();
+  var range = ANALYTICS.getPeriodRange(period);
 
   /* 更新标题 */
   var labelEl = document.getElementById('anPeriodLabel');
-  if (labelEl) labelEl.textContent = '统计周期: ' + (PERIOD_LABELS[period] || '全部') + '分析 ｜ 船舶代理核心指标';
+  if (labelEl) labelEl.textContent = '统计周期: ' + range.label + ' ｜ 船舶代理核心指标';
 
   var trendEl = document.getElementById('anTrendTitle');
-  if (trendEl) trendEl.textContent = '📈 ' + (PERIOD_LABELS[period] || '全部') + '趋势(' + (PERIOD_TREND[period]||'按月') + ')';
+  var trendLabel = (period === 'week' || period.indexOf('month-')===0) ? '每日' : '每月';
+  if (trendEl) trendEl.textContent = '📈 ' + range.label + ' 趋势(' + trendLabel + ')';
 
   /* ── 概览卡片 ── */
   try {
@@ -1978,7 +2013,7 @@ async function renderAnalytics() {
 
 async function exportAnalyticsReport() {
   try {
-    var report = await ANALYTICS.generateReport(_anPeriod || 'all');
+    var report = await ANALYTICS.generateReport(buildPeriodKey());
     var blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

@@ -280,12 +280,13 @@
         <p style="color:#64748B;font-size:.75rem" id="anPeriodLabel">选择时间跨度进行多维分析</p>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <div style="display:flex;gap:2px;background:#F1F5F9;border-radius:8px;padding:3px">
+        <div style="display:flex;gap:2px;background:#F1F5F9;border-radius:8px;padding:3px;align-items:center">
           <button class="an-period-btn on" onclick="setAnalyticsPeriod('week')" id="anBtnWeek">周</button>
-          <button class="an-period-btn" onclick="setAnalyticsPeriod('month')" id="anBtnMonth">月</button>
-          <button class="an-period-btn" onclick="setAnalyticsPeriod('quarter')" id="anBtnQuarter">季</button>
-          <button class="an-period-btn" onclick="setAnalyticsPeriod('year')" id="anBtnYear">年</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('month')" id="anBtnMonth">月度</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('quarter')" id="anBtnQuarter">季度</button>
+          <button class="an-period-btn" onclick="setAnalyticsPeriod('year')" id="anBtnYear">年度</button>
           <button class="an-period-btn" onclick="setAnalyticsPeriod('all')" id="anBtnAll">全部</button>
+          <select id="anPeriodValue" onchange="onPeriodValueChange()" style="border:none;background:#E2E8F0;border-radius:6px;font-size:12px;padding:3px 6px;outline:none;display:none;max-width:90px"></select>
         </div>
         <button class="btn btn-p btn-sm" onclick="exportAnalyticsReport()">📄 导出汇报</button>
       </div>
