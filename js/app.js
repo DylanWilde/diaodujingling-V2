@@ -1484,7 +1484,7 @@ function enterViewerMode(payload) {
   sharedBB = payload.blackboard || [];
 
   /* 游客仅可见Tab0，隐藏Tab1-6 */
-  for (var t = 1; t <= 6; t++) {
+  for (var t = 1; t <= 7; t++) {
     var btn = document.querySelectorAll('.tb-btn')[t];
     if (btn) btn.style.display = 'none';
   }
