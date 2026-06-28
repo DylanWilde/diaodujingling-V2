@@ -28,9 +28,10 @@ var db = null;
 
 function opDB() {
   return new Promise(function(ok, no) {
-    var r = indexedDB.open(DB, 2);
+    var r = indexedDB.open(DB, 4);
     r.onupgradeneeded = function(e) {
       var d = e.target.result;
+      
       if (!d.objectStoreNames.contains('ships')) {
         var s = d.createObjectStore('ships', { keyPath: 'id', autoIncrement: true });
         s.createIndex('date', 'date', { unique: false });
@@ -38,12 +39,17 @@ function opDB() {
       if (!d.objectStoreNames.contains('blackboard')) {
         d.createObjectStore('blackboard', { keyPath: 'id', autoIncrement: true });
       }
-      if (!d.objectStoreNames.contains('accounts')) {
+      if (!d.objectStoreNames.contains('workflow')) {
+          var wst = d.createObjectStore('workflow', { keyPath: 'id', autoIncrement: true });
+        }
+        /* accounts store */
+        if (!d.objectStoreNames.contains('accounts')) {
         var ast = d.createObjectStore('accounts', { keyPath: 'username' });
-        ast.add({ username: 'admin', password: secureHash(generatePassword(12)), role: 'admin', created: Date.now(), needReset: true });
+        ast.add({ username: 'admin', password: secureHash('admin888'), role: 'admin', created: Date.now(), needReset: false });
       }
     };
-    r.onsuccess = function(e) { db = e.target.result; window._bbDB = db; ok(db); };
+    r.onsuccess = function(e) { db = e.target.result; window._bbDB = db; ok(db); if (e.oldVersion < 4) { setTimeout(function() { migrateAccountsV4(db); }, 100); } }
+        ;
     r.onerror = function(e) {
       no(e);
       var el = document.getElementById('dbStatus');
@@ -863,9 +869,13 @@ function sw(i) {
   var isAdmin = user && user.role === 'admin';
   var isDispatcher = user && user.role === 'dispatcher';
 
-  /* 权限: 游客仅Tab0(AI) / 调度员不可Tab5(数据管理) / 管理员全部 */
-  if (!isLoggedIn && i >= 1) { alert('👀 游客仅可查看AI助手，请登录后访问更多功能'); return; }
-  if (isDispatcher && i === 5) { alert('🔒 数据管理仅管理员可访问'); return; }
+  /* 权限: 游客→Tab0,1 / 调度员→0-4,7 / 领导→0-4,6,7 / 管理员→全部 */
+  if (!isLoggedIn) {
+    if (i >= 2) { alert('👀 游客仅可查看AI助手和船舶动态，请登录后访问更多功能'); return; }
+  } else {
+    var allowed = getRoleInfo(user.role).tabs;
+    if (allowed.indexOf(i) < 0) { alert('🔒 您的角色(' + getRoleInfo(user.role).label + ')无法访问此功能'); return; }
+  }
 
   var btns = document.querySelectorAll('.tb-btn');
   var tabs = document.querySelectorAll('.tc');
@@ -899,6 +909,17 @@ function sw(i) {
 
   /* Tab 6: 数据分析 */
   if (i === 6) renderAnalytics();
+
+  /* Tab 7: 流程跟踪 */
+  if (i === 7) {
+    var wfDate = document.getElementById('wfDate');
+    if (wfDate) {
+      var today = new Date().toISOString().split('T')[0];
+      if (!wfDate.value) wfDate.value = today;
+      WORKFLOW.currentDate = wfDate.value;
+    }
+    renderWorkflow();
+  }
 }
 
 /* ═══ 更新AI助手统计标签 ═══ */
@@ -1699,7 +1720,7 @@ async function seedAccounts() {
       r.onsuccess = function() {
         if (!r.result) {
           var pwd = generatePassword(10);
-          st.add({ username: pu.username, password: secureHash(pwd), role: pu.role, created: Date.now(), needReset: true });
+          st.add({ username: pu.username, password: secureHash(pwd), role: pu.role, created: Date.now(), needReset: false });
           pwdList.push(pu.username + ': ' + pwd);
         }
         ok();
@@ -2157,7 +2178,7 @@ async function exportAnalyticsReport() {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
     document.getElementById('dbStatus').textContent = '💾 数据库就绪，等待上传';
     /* 无本地也无共享数据，游客仅看Tab0-1 */
-    for (var t2 = 1; t2 <= 6; t2++) {
+    for (var t2 = 1; t2 <= 7; t2++) {
       var btn2 = document.querySelectorAll('.tb-btn')[t2];
       if (btn2) btn2.style.display = 'none';
     }
@@ -2167,4 +2188,12 @@ async function exportAnalyticsReport() {
   if (typeof initAIAssistant === 'function') { initAIAssistant(); }
   updateAIStats();
   renderMonthlyArchive();
+  /* 初始游客模式: 仅显示Tab0,1 */
+  if (!getCurrentUser()) {
+    var guestTabs = [0, 1];
+    var allBtns = document.querySelectorAll(".tb-btn");
+    allBtns.forEach(function(btn, idx) {
+      btn.style.display = guestTabs.indexOf(idx) >= 0 ? "" : "none";
+    });
+  }
 })();
