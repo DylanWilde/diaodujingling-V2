@@ -17,43 +17,52 @@ var WORKFLOW = {
   /* ── 当前查看日期 ── */
   currentDate: new Date().toISOString().split('T')[0],
 
-  _openDB: function() {
-    return new Promise(function(ok, no) {
-      var r = indexedDB.open('DDB_v5', 3);
-      r.onupgradeneeded = function(e) {
-        var d = e.target.result;
-        if (!d.objectStoreNames.contains('workflow')) {
-          d.createObjectStore('workflow', { keyPath: 'id', autoIncrement: true });
-        }
-      };
-      r.onsuccess = function(e) { ok(e.target.result); };
-      r.onerror = function(e) { no(e); };
+  _db: function() { return db || window._bbDB; },
+
+  getAll: function() {
+    return new Promise(function(ok) {
+      var d = WORKFLOW._db();
+      if (!d || !d.objectStoreNames.contains('workflow')) { ok([]); return; }
+      var tx = d.transaction('workflow', 'readonly');
+      var st = tx.objectStore('workflow');
+      var r = st.getAll();
+      r.onsuccess = function() { ok(r.result || []); };
+      r.onerror = function() { ok([]); };
     });
   },
 
-  getAll: function() {
-    var self = this;
+  getById: function(id) {
     return new Promise(function(ok) {
-      self._openDB().then(function(d) {
-        var tx = d.transaction('workflow', 'readonly');
-        var st = tx.objectStore('workflow');
-        var r = st.getAll();
-        r.onsuccess = function() { ok(r.result || []); };
-        r.onerror = function() { ok([]); };
-      }).catch(function() { ok([]); });
+      var d = WORKFLOW._db();
+      if (!d) { ok(null); return; }
+      var tx = d.transaction('workflow', 'readonly');
+      var st = tx.objectStore('workflow');
+      var r = st.get(id);
+      r.onsuccess = function() { ok(r.result || null); };
+      r.onerror = function() { ok(null); };
     });
   },
 
   save: function(record) {
-    var self = this;
     return new Promise(function(ok) {
-      self._openDB().then(function(d) {
-        var tx = d.transaction('workflow', 'readwrite');
-        var st = tx.objectStore('workflow');
-        if (record.id) { st.put(record); }
-        else { st.add(record); }
-        tx.oncomplete = function() { ok(true); };
-      });
+      var d = WORKFLOW._db();
+      if (!d) { ok(false); return; }
+      var tx = d.transaction('workflow', 'readwrite');
+      var st = tx.objectStore('workflow');
+      if (record.id) { st.put(record); }
+      else { st.add(record); }
+      tx.oncomplete = function() { ok(true); };
+    });
+  },
+
+  saveBatch: function(records) {
+    return new Promise(function(ok) {
+      var d = WORKFLOW._db();
+      if (!d || !records.length) { ok(false); return; }
+      var tx = d.transaction('workflow', 'readwrite');
+      var st = tx.objectStore('workflow');
+      records.forEach(function(r) { st.add(r); });
+      tx.oncomplete = function() { ok(true); };
     });
   },
 
@@ -92,14 +101,13 @@ var WORKFLOW = {
   },
 
   remove: function(id) {
-    var self = this;
     return new Promise(function(ok) {
-      self._openDB().then(function(d) {
-        var tx = d.transaction('workflow', 'readwrite');
-        var st = tx.objectStore('workflow');
-        st.delete(id);
-        tx.oncomplete = function() { ok(true); };
-      });
+      var d = WORKFLOW._db();
+      if (!d) { ok(false); return; }
+      var tx = d.transaction('workflow', 'readwrite');
+      var st = tx.objectStore('workflow');
+      st.delete(id);
+      tx.oncomplete = function() { ok(true); };
     });
   },
 
@@ -128,30 +136,21 @@ var WORKFLOW = {
 
           if (!toAdd.length) { ok(0); return; }
 
-          Promise.all(toAdd.map(function(s) {
-            return self.save({
-              date: s.date,
-              name: s.name,
-              en: s.en || '',
-              iv: s.iv || '',
-              ev: s.ev || '',
-              tm: s.tm || '',
-              arV: s.arV != null ? s.arV : '',
-              drV: s.drV != null ? s.drV : '',
-              arRaw: s.arRaw || '',
-              drRaw: s.drRaw || '',
-              eta: s.eta || '',
-              pp: s.pp || '',
-              np: s.np || '',
+          var batch = toAdd.map(function(s) {
+            return {
+              date: s.date, name: s.name, en: s.en || '',
+              iv: s.iv || '', ev: s.ev || '', tm: s.tm || '',
+              arV: s.arV != null ? s.arV : '', drV: s.drV != null ? s.drV : '',
+              arRaw: s.arRaw || '', drRaw: s.drRaw || '',
+              eta: s.eta || '', pp: s.pp || '', np: s.np || '',
               schedule:     { status: 'done', by: 'auto', at: new Date().toISOString() },
               pilotage:     { status: 'pending', by: '', at: '' },
               singleWindow: { status: 'pending', by: '', at: '' },
               channelPass:  { status: 'pending', by: '', at: '' },
-              note: '',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            });
-          })).then(function() { ok(toAdd.length); });
+              note: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            };
+          });
+          self.saveBatch(batch).then(function() { ok(batch.length); });
         });
       });
     });
@@ -258,7 +257,7 @@ function renderWFCard(r) {
       var dt = rec.at ? new Date(rec.at).toLocaleString('zh-CN', { month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit' }) : '';
       var extra = '';
       if (s.key === 'channelPass') {
-        extra = (rec.channel || '') + '槽';
+        extra = (rec.channel ? rec.channel + '槽' : '');
         if (rec.passTime) extra += ' ' + rec.passTime;
       }
       html += '<div class="wf-timeline-item done">'
@@ -295,8 +294,7 @@ function renderWFCard(r) {
 
 /* ═══ 普通推进（非走槽） ═══ */
 function advanceWF(id, stageKey) {
-  WORKFLOW.getAll().then(function(records) {
-    var r = records.find(function(x) { return x.id === id; });
+  WORKFLOW.getById(id).then(function(r) {
     if (!r) return;
     WORKFLOW.advance(r, stageKey).then(function() { renderWorkflow(); });
   });
@@ -304,8 +302,7 @@ function advanceWF(id, stageKey) {
 
 /* ═══ 走槽确认弹窗 ═══ */
 function openChannelPassModal(id) {
-  WORKFLOW.getAll().then(function(records) {
-    var r = records.find(function(x) { return x.id === id; });
+  WORKFLOW.getById(id).then(function(r) {
     if (!r) return;
     window._wfPendingId = id;
 
@@ -351,8 +348,7 @@ function confirmChannelPass() {
   if (!passTime) { msgEl.innerHTML = '请填写走槽时间'; msgEl.className = 'st st-err'; return; }
 
   var id = window._wfPendingId;
-  WORKFLOW.getAll().then(function(records) {
-    var r = records.find(function(x) { return x.id === id; });
+  WORKFLOW.getById(id).then(function(r) {
     if (!r) return;
     WORKFLOW.advance(r, 'channelPass', {
       channel: channel.value,
