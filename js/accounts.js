@@ -7,7 +7,6 @@
    游客: 仅AI助手 + 船舶动态
    ═══════════════════════════════════════════════════ */
 
-var ACCOUNTS_DB = 'DDB_v5';
 var currentUser = null;
 
 var ROLES = {
