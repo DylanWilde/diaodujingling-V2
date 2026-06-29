@@ -28,9 +28,10 @@ var db = null;
 
 function opDB() {
   return new Promise(function(ok, no) {
-    var r = indexedDB.open(DB, 2);
+    var r = indexedDB.open(DB, 4);
     r.onupgradeneeded = function(e) {
       var d = e.target.result;
+      
       if (!d.objectStoreNames.contains('ships')) {
         var s = d.createObjectStore('ships', { keyPath: 'id', autoIncrement: true });
         s.createIndex('date', 'date', { unique: false });
@@ -38,12 +39,17 @@ function opDB() {
       if (!d.objectStoreNames.contains('blackboard')) {
         d.createObjectStore('blackboard', { keyPath: 'id', autoIncrement: true });
       }
-      if (!d.objectStoreNames.contains('accounts')) {
+      if (!d.objectStoreNames.contains('workflow')) {
+          var wst = d.createObjectStore('workflow', { keyPath: 'id', autoIncrement: true });
+        }
+        /* accounts store */
+        if (!d.objectStoreNames.contains('accounts')) {
         var ast = d.createObjectStore('accounts', { keyPath: 'username' });
-        ast.add({ username: 'admin', password: secureHash(generatePassword(12)), role: 'admin', created: Date.now(), needReset: true });
+        ast.add({ username: 'admin', password: secureHash('admin888'), role: 'admin', created: Date.now(), needReset: false });
       }
     };
-    r.onsuccess = function(e) { db = e.target.result; window._bbDB = db; ok(db); };
+    r.onsuccess = function(e) { db = e.target.result; window._bbDB = db; ok(db); if (e.oldVersion < 4) { setTimeout(function() { migrateAccountsV4(db); }, 100); } }
+        ;
     r.onerror = function(e) {
       no(e);
       var el = document.getElementById('dbStatus');
@@ -327,11 +333,18 @@ async function up() {
   var ok = await saveDateData(ships, curDate);
   el.innerHTML = ok ? '✅ 已导入 ' + ships.length + ' 条并保存到数据库' : '❌ 保存失败';
   el.className = ok ? 'st st-ok' : 'st st-err';
+
+  /* V8: 推送到 API */
+  if (ok && API.getToken()) {
+    try { await saveShipsHybrid(curDate, ships); el.innerHTML += ' 🌐 已推送到服务器'; }
+    catch(e) { el.innerHTML += ' ⚠️ 服务器推送失败'; }
+  }
+
   await refreshDates();
   rd();
 
-  /* 管理员自动发布到线上 */
-  if (ok && getCurrentUser() && getCurrentUser().role === 'admin') {
+  /* 管理员自动发布到线上（保留GitHub Pages兼容） */
+  if (ok && !API.getToken() && getCurrentUser() && getCurrentUser().role === 'admin') {
     el.innerHTML += ' 🔄 自动发布中...';
     try { await publishDataSilent(); el.innerHTML += ' ✅ 已同步到线上'; }
     catch(e) { el.innerHTML += ' ⚠️ 自动发布失败，请手动发布'; }
@@ -785,9 +798,11 @@ async function onDashDate() {
   document.getElementById('sd').value = d;
   var dDate3El = document.getElementById('dDate3');
   if (dDate3El) dDate3El.value = d;
-  /* 优先本地，再回退共享 */
+  /* V8: 优先 API，再本地，最后回退共享 */
   if (isViewerMode) {
     ships = sharedShips.filter(function(s) { return s.date === d; });
+  } else if (API.getToken()) {
+    ships = await loadShipsHybrid(d);
   } else {
     ships = await loadDateData(d);
     if (!ships.length && sharedShips.length) {
@@ -863,9 +878,13 @@ function sw(i) {
   var isAdmin = user && user.role === 'admin';
   var isDispatcher = user && user.role === 'dispatcher';
 
-  /* 权限: 游客仅Tab0(AI) / 调度员不可Tab5(数据管理) / 管理员全部 */
-  if (!isLoggedIn && i >= 1) { alert('👀 游客仅可查看AI助手，请登录后访问更多功能'); return; }
-  if (isDispatcher && i === 5) { alert('🔒 数据管理仅管理员可访问'); return; }
+  /* 权限: 游客→Tab0,1 / 调度员→0-4,7 / 领导→0-4,6,7 / 管理员→全部 */
+  if (!isLoggedIn) {
+    if (i >= 2) { alert('👀 游客仅可查看AI助手和船舶动态，请登录后访问更多功能'); return; }
+  } else {
+    var allowed = getRoleInfo(user.role).tabs;
+    if (allowed.indexOf(i) < 0) { alert('🔒 您的角色(' + getRoleInfo(user.role).label + ')无法访问此功能'); return; }
+  }
 
   var btns = document.querySelectorAll('.tb-btn');
   var tabs = document.querySelectorAll('.tc');
@@ -899,6 +918,17 @@ function sw(i) {
 
   /* Tab 6: 数据分析 */
   if (i === 6) renderAnalytics();
+
+  /* Tab 7: 流程跟踪 */
+  if (i === 7) {
+    var wfDate = document.getElementById('wfDate');
+    if (wfDate) {
+      var today = new Date().toISOString().split('T')[0];
+      if (!wfDate.value) wfDate.value = today;
+      WORKFLOW.currentDate = wfDate.value;
+    }
+    renderWorkflow();
+  }
 }
 
 /* ═══ 更新AI助手统计标签 ═══ */
@@ -1172,18 +1202,32 @@ async function saveDecl() {
   closeDeclModal();
   rd3();
 
-  /* 自动发布到线上，合并远程数据避免覆盖 */
   var stEl = document.getElementById('dbStatus');
-  stEl.textContent = '💾 已保存 · 🔄 同步发布中...';
-  try {
-    await publishDeclChange(name, iv, ev, {
-      maritime7: maritime7,
-      maritime7Note: maritime7Note,
-      maritime7By: confirmedBy
-    }, curDate);
-    stEl.textContent = '✅ 申报已同步到线上 · ' + new Date().toTimeString().slice(0,5);
-  } catch(e) {
-    stEl.innerHTML = '<span style="color:#D97706">⚠️ 本地已保存，同步失败：' + escHtml(e.message) + '（请管理员手动点"发布到线上"）</span>';
+  /* V8: 优先推送到 API */
+  if (API.getToken()) {
+    try {
+      await saveDeclHybrid(curDate, name, iv, ev, {
+        maritime7: maritime7,
+        maritime7Note: maritime7Note,
+        maritime7By: confirmedBy
+      });
+      stEl.textContent = '✅ 申报已同步到服务器 · ' + new Date().toTimeString().slice(0,5);
+    } catch (e) {
+      stEl.innerHTML = '<span style="color:#D97706">⚠️ 本地已保存，服务器同步失败</span>';
+    }
+  } else {
+    /* 原有 GitHub Pages 发布 */
+    stEl.textContent = '💾 已保存 · 🔄 同步发布中...';
+    try {
+      await publishDeclChange(name, iv, ev, {
+        maritime7: maritime7,
+        maritime7Note: maritime7Note,
+        maritime7By: confirmedBy
+      }, curDate);
+      stEl.textContent = '✅ 申报已同步到线上 · ' + new Date().toTimeString().slice(0,5);
+    } catch(e) {
+      stEl.innerHTML = '<span style="color:#D97706">⚠️ 本地已保存，同步失败：' + escHtml(e.message) + '（请管理员手动点"发布到线上"）</span>';
+    }
   }
 }
 
@@ -1260,6 +1304,8 @@ async function onDashDate3() {
   if (dDateEl) dDateEl.value = d;
   if (isViewerMode) {
     ships = sharedShips.filter(function(s) { return s.date === d; });
+  } else if (API.getToken()) {
+    ships = await loadShipsHybrid(d);
   } else {
     ships = await loadDateData(d);
     if (!ships.length && sharedShips.length) {
@@ -1279,6 +1325,10 @@ var PRE_CONFIG_TOKEN = '';
 var isViewerMode = false;
 var sharedShips = [];
 var sharedBB = [];
+
+/* V8 API 配置 */
+var API_BASE = APP_CONFIG.apiBase || '';
+if (API_BASE) { API.setBase(API_BASE); }
 
 function base64Encode(str) {
   return btoa(unescape(encodeURIComponent(str)));
@@ -1463,7 +1513,7 @@ function enterViewerMode(payload) {
   sharedBB = payload.blackboard || [];
 
   /* 游客仅可见Tab0，隐藏Tab1-6 */
-  for (var t = 1; t <= 6; t++) {
+  for (var t = 1; t <= 7; t++) {
     var btn = document.querySelectorAll('.tb-btn')[t];
     if (btn) btn.style.display = 'none';
   }
@@ -1699,7 +1749,7 @@ async function seedAccounts() {
       r.onsuccess = function() {
         if (!r.result) {
           var pwd = generatePassword(10);
-          st.add({ username: pu.username, password: secureHash(pwd), role: pu.role, created: Date.now(), needReset: true });
+          st.add({ username: pu.username, password: secureHash(pwd), role: pu.role, created: Date.now(), needReset: false });
           pwdList.push(pu.username + ': ' + pwd);
         }
         ok();
@@ -2058,9 +2108,23 @@ async function exportAnalyticsReport() {
   /* 预置调度员和经理账号 */
   await seedAccounts();
 
-  /* 尝试自动登录 */
+  /* 尝试自动登录 — 优先 API JWT */
   var savedUser = localStorage.getItem('dispatch_user');
-  if (savedUser) {
+  if (API.getToken()) {
+    try {
+      var meData = await API.me();
+      if (meData && meData.username) {
+        currentUser = { username: meData.username, role: meData.role };
+        updateUserUI();
+        /* 同步本地存储 */
+        localStorage.setItem('dispatch_user', meData.username);
+      }
+    } catch (e) {
+      API.setToken('');  // Token 过期，清除
+    }
+  }
+  /* IndexedDB 自动登录（兜底） */
+  if (!currentUser && savedUser) {
     try {
       var d = db || window._bbDB;
       var tx = d.transaction('accounts', 'readonly');
@@ -2106,14 +2170,20 @@ async function exportAnalyticsReport() {
     if (dDateEl2) dDateEl2.value = curDate;
     var dDate3El2 = document.getElementById('dDate3');
     if (dDate3El2) dDate3El2.value = curDate;
-    ships = await loadDateData(curDate);
+    /* V8: 优先从 API 加载 */
+    if (API.getToken()) {
+      ships = await loadShipsHybrid(curDate);
+    } else {
+      ships = await loadDateData(curDate);
+    }
     if (!ships.length && sharedShips.length) {
       ships = sharedShips.filter(function(s) { return s.date === curDate; });
       ships.forEach(function(s) { s.eta = s.eta || ''; s.maritime7 = !!s.maritime7; s.maritime7Note = s.maritime7Note || ''; s.maritime7By = s.maritime7By || ''; });
     }
-    document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — 数据库 ' + ships.length + ' 条记录';
+    var sourceTag = API.getToken() ? '🌐 服务器' : '💾 本地';
+    document.getElementById('upSt').innerHTML = '📅 ' + curDate + ' — ' + sourceTag + ' ' + ships.length + ' 条记录';
     document.getElementById('upSt').className = 'st st-info';
-    document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot"></span>💾 已加载 ' + ships.length + ' 条数据';
+    document.getElementById('dbStatus').innerHTML = '<span class="pulse-dot"></span>' + sourceTag + ' ' + ships.length + ' 条数据';
     ['dl','dDate','dDate3'].forEach(function(id) {
       var sel = document.getElementById(id);
       if (!sel) return;
@@ -2157,7 +2227,7 @@ async function exportAnalyticsReport() {
     document.getElementById('upSt').innerHTML = '📅 暂无数据，请上传船期表';
     document.getElementById('dbStatus').textContent = '💾 数据库就绪，等待上传';
     /* 无本地也无共享数据，游客仅看Tab0-1 */
-    for (var t2 = 1; t2 <= 6; t2++) {
+    for (var t2 = 1; t2 <= 7; t2++) {
       var btn2 = document.querySelectorAll('.tb-btn')[t2];
       if (btn2) btn2.style.display = 'none';
     }
@@ -2167,4 +2237,12 @@ async function exportAnalyticsReport() {
   if (typeof initAIAssistant === 'function') { initAIAssistant(); }
   updateAIStats();
   renderMonthlyArchive();
+  /* 初始游客模式: 仅显示Tab0,1 */
+  if (!getCurrentUser()) {
+    var guestTabs = [0, 1];
+    var allBtns = document.querySelectorAll(".tb-btn");
+    allBtns.forEach(function(btn, idx) {
+      btn.style.display = guestTabs.indexOf(idx) >= 0 ? "" : "none";
+    });
+  }
 })();

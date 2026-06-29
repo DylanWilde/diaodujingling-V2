@@ -1,0 +1,24 @@
+{
+  "folders": [
+    {
+      "name": "调度精灵 V7",
+      "path": ".",
+      "color": "green"
+    },
+    {
+      "name": "ClaudeCode Space",
+      "path": "../.."
+    }
+  ],
+  "settings": {
+    "editor.fontFamily": "'Cascadia Code', 'Microsoft YaHei', monospace",
+    "editor.fontSize": 14,
+    "workbench.colorCustomizations": {
+      "activityBar.background": "#0F172A",
+      "activityBar.foreground": "#94A3B8",
+      "activityBar.inactiveForeground": "#475569",
+      "titleBar.activeBackground": "#0F172A",
+      "titleBar.activeForeground": "#F8FAFC"
+    }
+  }
+}

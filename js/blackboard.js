@@ -150,6 +150,24 @@ async function bbSend() {
   var user = getCurrentUser();
   if (!user) { alert('请先登录'); return; }
 
+  /* 优先 API */
+  if (API.getToken()) {
+    try {
+      await API.sendMessage(bbDate, msg);
+      inp.value = '';
+      /* 从 API 重新加载 */
+      var apiMsgs = await loadBBHybrid(bbDate);
+      if (apiMsgs.length) {
+        bbMessages = apiMsgs;
+        renderBlackboard();
+        return;
+      }
+    } catch (e) {
+      console.warn('[BB] API发送失败，降级到本地:', e.message);
+    }
+  }
+
+  /* 本地保存 */
   var entry = {
     date: bbDate,
     author: user.username,
@@ -157,7 +175,6 @@ async function bbSend() {
     message: msg,
     ts: Date.now()
   };
-
   var ok = await saveBBMessage(entry);
   if (ok) {
     inp.value = '';
@@ -169,6 +186,11 @@ async function bbSend() {
 /* 删除消息 */
 async function delBB(id) {
   if (!confirm('确定删除这条提醒？')) return;
+  /* 优先 API */
+  if (API.getToken()) {
+    try { await API.deleteMessage(id); }
+    catch (e) { console.warn('[BB] API删除失败:', e.message); }
+  }
   var ok = await deleteBBMessage(id);
   if (ok) {
     bbMessages = bbMessages.filter(function(m) { return m.id !== id; });
@@ -218,6 +240,19 @@ function mergeBBMessages(local, shared) {
 }
 
 async function bbPollShared() {
+  /* 优先从 API 拉取 */
+  if (API.getToken()) {
+    try {
+      var apiMsgs = await loadBBHybrid(bbDate);
+      if (apiMsgs.length !== bbMessages.length) {
+        var local = await loadBBMessages(bbDate);
+        bbMessages = mergeBBMessages(local, apiMsgs);
+        renderBlackboard();
+      }
+      return;
+    } catch (e) { /* 降级 */ }
+  }
+  /* 原有 GitHub Pages 轮询 */
   try {
     var resp = await fetch(SHARED_DATA_URL + '?t=' + Date.now());
     if (!resp.ok) return;
@@ -227,8 +262,8 @@ async function bbPollShared() {
     else if (data && data.blackboard) { bb = data.blackboard; }
     if (bb.length) {
       sharedBB = bb;
-      var local = await loadBBMessages(bbDate);
-      var merged = mergeBBMessages(local, sharedBB);
+      var local2 = await loadBBMessages(bbDate);
+      var merged = mergeBBMessages(local2, sharedBB);
       if (merged.length !== bbMessages.length) {
         bbMessages = merged;
         renderBlackboard();

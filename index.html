@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>调度精灵/DispatchHub V6 · 航运智能助手</title>
+<title>调度精灵/DispatchHub V7 · 航运智能助手</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/effects.css">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -13,7 +13,7 @@
 <div class="container">
 
 <div class="hd">
-  <div><h1>⚓ 调度精灵 <span class="v">V6</span><span class="sub">/ DispatchHub</span></h1></div>
+  <div><h1>⚓ 调度精灵 <span class="v">V7</span><span class="sub">/ DispatchHub</span></h1></div>
   <div style="display:flex;gap:8px;align-items:center">
     <span class="st" id="dbStatus">💾 初始化...</span>
     <span class="by">Tato.Lee</span>
@@ -31,6 +31,7 @@
   <button class="tb-btn" onclick="sw(4)" id="tbAdmin2">📝 调度黑板</button>
   <button class="tb-btn" onclick="sw(5)" id="tbAdmin3">⚙️ 数据管理</button>
   <button class="tb-btn" onclick="sw(6)" id="tbAnalytics" style="color:#7C3AED">📊 数据分析</button>
+	  <button class="tb-btn" onclick="sw(7)" id="tbWorkflow">🔄 流程跟踪</button>
 </div>
 
 <!-- ════ TAB 0: 调度精灵AI ════ -->
@@ -377,6 +378,40 @@
   </div>
 </div>
 
+<!-- ════ TAB 7: 流程跟踪 ════ -->
+<div id="t7" class="tc">
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2>🔄 船舶流程跟踪</h2>
+        <p style="color:#64748B;font-size:.75rem;margin-top:4px">
+          港务局船期 → 引航申报 → 单一窗口 → 走槽确认 &nbsp;|&nbsp;
+          走槽负责人：冯磊 &nbsp;|&nbsp;
+          自动同步当日船期数据
+        </p>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <div class="c" style="min-width:130px"><input type="date" id="wfDate" onchange="changeWFDate()" style="font-size:11px;padding:5px 8px"></div>
+        <button class="btn btn-s btn-sm" onclick="renderWorkflow()">🔄 刷新</button>
+      </div>
+    </div>
+  </div>
+  <div class="sb" id="wfStats"></div>
+  <div id="wfBoard" style="min-height:400px"></div>
+</div>
+
+<!-- 走槽确认弹窗 -->
+<div class="modal-overlay" id="wfModal" onclick="if(event.target===this)closeChannelPassModal()">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-hd"><h3>✅ 走槽确认</h3><button class="modal-close" onclick="closeChannelPassModal()">✕</button></div>
+    <div class="modal-body" id="wfModalBody"></div>
+    <div class="modal-ft">
+      <button class="btn btn-p" onclick="confirmChannelPass()">✅ 确认完成</button>
+      <button class="btn" style="background:#E2E8F0;color:#475569" onclick="closeChannelPassModal()">取消</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /container -->
 
 <!-- 船讯网弹窗 -->
@@ -416,11 +451,13 @@
 </div>
 
 <script src="js/crypto-utils.js"></script>
+<script src="js/api.js"></script>
 <script src="js/ships-map.js"></script>
 <script src="js/port-chart.js"></script>
 <script src="js/blackboard.js"></script>
 <script src="js/accounts.js"></script>
 <script src="js/analytics.js"></script>
+<script src="js/workflow.js"></script>
 <script src="js/app.js"></script>
 <script src="js/ai-assistant.js"></script>
 <script src="js/effects.js"></script>
